@@ -363,6 +363,76 @@ namespace Pos.WebApi.Features.InventoryTransactions
             }
         }
 
+        [HttpGet("GetInventoryReturn/{from}/{to}")]
+        public IActionResult GetInventoryReturn(DateTime from, DateTime to)
+        {
+            try
+            {
+                var response = _service.GetInventoryReturnByDate(from, to);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("AddInventoryReturn")]
+        public IActionResult AddInventoryReturn(InventoryReturn request)
+        {
+            try
+            {
+                var response = _service.AddInventoryReturn(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPut("UpdateInventoryReturn")]
+        public IActionResult UpdateInventoryReturn(InventoryReturn request)
+        {
+            try
+            {
+                var response = _service.UpdateInventoryReturn(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPut("CompleteInventoryReturn")]
+        public IActionResult CompleteInventoryReturn(InventoryReturn request)
+        {
+            try
+            {
+                var response = _service.CompleteInventoryReturn(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpGet("GetInventoryReturnResumen/{date}/{whscode}")]
+        public IActionResult GetInventoryReturn(DateTime date, int whscode)
+        {
+            try
+            {
+                var response = _service.GetResumenReturn(date, whscode);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
 
     }
 }

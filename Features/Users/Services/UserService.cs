@@ -48,6 +48,7 @@ namespace Pos.WebApi.Features.Users
                               SalesPerson = u.SalesPerson,
                               WhsCode = u.WhsCode,
                               SellerId = u.SellerId,
+                              EditPrice = u.EditPrice,
                               SarCorrelativeId = u.SarCorrelativeId,
                               CorrelativeName = s.Description
                           }
@@ -83,6 +84,7 @@ namespace Pos.WebApi.Features.Users
             currentUser.Email = user.Email;
             currentUser.RoleId = user.RoleId;
             currentUser.ThemeId = user.ThemeId;
+            currentUser.EditPrice = user.EditPrice;
             currentUser.Active = user.Active;
             currentUser.SalesPerson = user.SalesPerson;
             currentUser.WhsCode = user.WhsCode;

@@ -12,6 +12,8 @@ using Pos.WebApi.Features.Customers.Services;
 using Pos.WebApi.Features.Common;
 using Pos.WebApi.Features.Common.Entities;
 using Pos.WebApi.Features.Suppliers.Services;
+using Pos.WebApi.Features.PurchasePayment.Entitie;
+using Pos.WebApi.Features.SalesPayment.Entities;
 
 
 namespace Pos.WebApi.Features.Purchase.Services
@@ -25,7 +27,7 @@ namespace Pos.WebApi.Features.Purchase.Services
         private readonly CustomerServices _priceService;
         private readonly BPJornalServices _bPJornalServices;
         private readonly SupplierServices _supplierServices;
-        public PurchaseServices(PosDbContext posDbContext,BPJornalServices bPJornalServices, ItemJournalServices journalServices, WareHouseServices wareHouseServices, ItemServices itemServices, CustomerServices priceService, SupplierServices supplierServices)
+        public PurchaseServices(PosDbContext posDbContext, BPJornalServices bPJornalServices, ItemJournalServices journalServices, WareHouseServices wareHouseServices, ItemServices itemServices, CustomerServices priceService, SupplierServices supplierServices)
         {
             _context = posDbContext;
             _journalServices = journalServices;
@@ -43,7 +45,7 @@ namespace Pos.WebApi.Features.Purchase.Services
         }
         public List<OrderPurchaseDto> GetOrderPurchaseActive()
         {
-            var result = GetBase(x => x.Complete==false).ToList();
+            var result = GetBase(x => x.Complete == false).ToList();
             return result;
         }
         public List<OrderPurchaseDto> GetOrderPurchaseByDate(DateTime From, DateTime To)
@@ -66,7 +68,7 @@ namespace Pos.WebApi.Features.Purchase.Services
             var units = _context.UnitOfMeasure.Where(x => unit.Contains(x.UnitOfMeasureId)).ToList();
             var payId = order.Select(x => x.PayConditionId).Distinct().ToList();
             var pays = _context.PayCondition.Where(x => payId.Contains(x.PayConditionId)).ToList();
-            
+
             var edetail = (from d in orderDetail
                            join i in items on d.ItemId equals i.ItemId
                            join w in whs on d.WhsCode equals w.WhsCode
@@ -83,9 +85,9 @@ namespace Pos.WebApi.Features.Purchase.Services
                                DueDate = d.DueDate,
                                Price = d.Price,
                                WhsCode = w.WhsCode,
-                               WhsName = w.WhsName,                            
+                               WhsName = w.WhsName,
                                UnitOfMeasureId = d.UnitOfMeasureId,
-                               UnitOfMeasureName = u.UnitOfMeasureName,                                                              
+                               UnitOfMeasureName = u.UnitOfMeasureName,
                                LineTotal = d.LineTotal
                            }).ToList();
 
@@ -103,7 +105,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                               PayConditionId = e.PayConditionId,
                               PayConditionName = p.PayConditionName,
                               DocDate = e.DocDate,
-                              DueDate=e.DueDate,
+                              DueDate = e.DueDate,
                               Canceled = e.Canceled,
                               Comment = e.Comment,
                               Reference = e.Reference,
@@ -175,7 +177,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                               PayConditionId = e.PayConditionId,
                               PayConditionName = p.PayConditionName,
                               DocDate = e.DocDate,
-                              DueDate=e.DueDate,
+                              DueDate = e.DueDate,
                               Canceled = e.Canceled,
                               Comment = e.Comment,
                               Reference = e.Reference,
@@ -191,7 +193,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                               CreateByName = u.Name,
                               Complete = e.Complete,
                               Detail = detail.ToList(),
-                              taxSupplier = e.Tax>0? true: false
+                              taxSupplier = e.Tax > 0 ? true : false
                           }).ToList();
             return result.OrderByDescending(x => x.DocDate).ToList();
         }
@@ -201,10 +203,11 @@ namespace Pos.WebApi.Features.Purchase.Services
             _context.Database.BeginTransaction();
             try
             {
-                request.DocDate = DateTime.Now;
+                DateTime fechaPorDefecto = DateTime.MinValue;
+                request.DocDate = request.DocDate != fechaPorDefecto ? request.DocDate : DateTime.Now;
                 request.DocQty = request.Detail.Sum(x => x.Quantity);
                 request.Complete = false;
-                request.Canceled = false;         
+                request.Canceled = false;
                 _context.OrderPurchase.Add(request);
                 _context.SaveChanges();
                 _context.Database.CommitTransaction();
@@ -240,7 +243,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                 currentOrder.DocQty = request.DocQty;
                 currentOrder.Complete = request.Complete;
                 var currentDetail = _context.OrderPurchaseDetail.Where(x => x.DocId == currentOrder.DocId).ToList();
-               // var removeLine = request.Detail.Where(x => x.IsDelete == true).ToList();
+                // var removeLine = request.Detail.Where(x => x.IsDelete == true).ToList();
                 ////Borramos las lineas
                 //_context.OrderPurchaseDetail.RemoveRange(removeLine);
                 var newLine = request.Detail.Where(x => x.DocDetailId == 0).ToList();
@@ -249,7 +252,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                 //Actualizamos las existente
                 currentDetail.ForEach((item) =>
                 {
-                    var itemToUpdate = request.Detail.Where(x => x.DocDetailId == item.DocDetailId && item.DocDetailId!=0).FirstOrDefault();
+                    var itemToUpdate = request.Detail.Where(x => x.DocDetailId == item.DocDetailId && item.DocDetailId != 0).FirstOrDefault();
                     if (itemToUpdate != null)
                     {
                         item.ItemId = itemToUpdate.ItemId;
@@ -284,7 +287,7 @@ namespace Pos.WebApi.Features.Purchase.Services
             try
             {
                 currentOrder.Canceled = true;
-                currentOrder.Complete = true;   
+                currentOrder.Complete = true;
                 _context.OrderPurchase.Update(currentOrder);
                 _context.SaveChanges();
                 _context.Database.CommitTransaction();
@@ -297,18 +300,18 @@ namespace Pos.WebApi.Features.Purchase.Services
             return GetOrderPurchaseById(docId);
         }
 
-        public List<OrderPurchaseDto> CompleteOrderPurchase(int docId, bool status )
+        public List<OrderPurchaseDto> CompleteOrderPurchase(int docId, bool status)
         {
             var currentOrder = _context.OrderPurchase.Where(x => x.DocId == docId).FirstOrDefault();
-            if (currentOrder == null) throw new Exception("No existe esta orden, comuniquese con el administrador del sistema.");        
+            if (currentOrder == null) throw new Exception("No existe esta orden, comuniquese con el administrador del sistema.");
             try
             {
                 currentOrder.Complete = status;
                 _context.OrderPurchase.Update(currentOrder);
-                _context.SaveChanges();              
+                _context.SaveChanges();
             }
-            catch (Exception ex) 
-            { 
+            catch (Exception ex)
+            {
                 throw new Exception(ex.InnerException != null ? ex.InnerException.Message : ex.Message);
             }
             return GetOrderPurchaseById(docId);
@@ -328,7 +331,7 @@ namespace Pos.WebApi.Features.Purchase.Services
 
         public List<InvoicePurchaseDto> GetInvoicePurchaseActiveSupplier(int idSupplier)
         {
-            var result = GetBaseInvoice(x => x.Complete == false && x.SupplierId ==idSupplier).ToList();
+            var result = GetBaseInvoice(x => x.Complete == false && x.SupplierId == idSupplier).ToList();
             return result;
         }
         public List<InvoicePurchaseDto> GetInvoicePurchaseByDate(DateTime From, DateTime To)
@@ -388,7 +391,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                               PayConditionId = e.PayConditionId,
                               PayConditionName = p.PayConditionName,
                               DocDate = e.DocDate,
-                              DueDate=e.DueDate,
+                              DueDate = e.DueDate,
                               Canceled = e.Canceled,
                               Comment = e.Comment,
                               Reference = e.Reference,
@@ -462,7 +465,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                               PayConditionId = e.PayConditionId,
                               PayConditionName = p.PayConditionName,
                               DocDate = e.DocDate,
-                              DueDate=e.DueDate,
+                              DueDate = e.DueDate,
                               Canceled = e.Canceled,
                               Comment = e.Comment,
                               Reference = e.Reference,
@@ -488,12 +491,15 @@ namespace Pos.WebApi.Features.Purchase.Services
             _context.Database.BeginTransaction();
             try
             {
-                request.DocDate = DateTime.Now;
+                DateTime fechaPorDefecto = DateTime.MinValue;
+                request.DocDate = request.DocDate != fechaPorDefecto ? request.DocDate : DateTime.Now;
                 request.DocQty = request.Detail.Sum(x => x.Quantity);
                 request.Complete = false;
                 request.Canceled = false;
                 request.Balance = request.DocTotal;
                 request.Detail.ForEach(x => x.DocDetailId = 0);
+                if (request.PayConditionId == 1)
+                    request.Complete = true;
                 _context.InvoicePurchase.Add(request);
                 _context.SaveChanges();
                 //Aumentamos inventario
@@ -507,7 +513,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                     Documents = "Factura de Compra",
                     DocumentReferent = request.DocId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = request.DocDate
 
                 }).ToList();
                 _journalServices.AddLinesJournal(journal);
@@ -524,7 +530,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                 warehouse.ForEach(x => _wareHouseServices.UpdateItemWareHouse(x));
                 warehouse.ForEach(x => _itemServices.UpdateStockItem(x.ItemId));
 
-                warehouse.ForEach(x => _priceService.UpdatePriceListDetail(x.ItemId, x.AvgPrice));
+                // warehouse.ForEach(x => _priceService.UpdatePriceListDetail(x.ItemId, x.AvgPrice));
                 //Aumentamos el saldo por pagar
                 var bpjournal = new BPJornal
                 {
@@ -540,8 +546,39 @@ namespace Pos.WebApi.Features.Purchase.Services
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _supplierServices.UpdateBalanceSupplier(request.SupplierId, request.DocTotal);
                 //Si viene de un pedido, cerramos ese pedido
-                if(request.DocReference!= 0)                
+                if (request.DocReference != 0)
                     this.CompleteOrderPurchase(request.DocReference, true);
+                //Si es de contado se aplica el pago
+                if (request.PayConditionId == 1)
+                {
+                    var payment = new PaymentPurchase
+                    {
+                        SupplierId = request.SupplierId,
+                        SupplierCode = request.SupplierCode,
+                        SupplierName = request.SupplierName,
+                        PayConditionId = request.PayConditionId,
+                        Reference = request.DocId.ToString(),
+                        DocDate = request.DocDate,
+                        Comment = "Factura de contado: " + request.DocId,
+                        DocTotal = request.DocTotal,
+                        CreateBy = request.CreateBy,
+                        CashSum = request.DocTotal,
+                    };
+                    var paymentDetail = new PaymentPurchaseDetail
+                    {
+                        InvoiceId = request.DocId,
+                        InvoiceDate = request.DocDate,
+                        InvoiceReference = request.DocId.ToString(),
+                        DueDate = request.DueDate,
+                        SubTotal = request.SubTotal,
+                        TaxTotal = request.Tax,
+                        DiscountTotal = request.DiscountsTotal,
+                        LineTotal = request.DocTotal,
+                        SumApplied = request.DocTotal
+                    };
+                    payment.Detail.Add(paymentDetail);
+                    AddPaymentPurchaseCounted(payment);
+                }
                 _context.Database.CommitTransaction();
             }
             catch (Exception ex)
@@ -559,6 +596,7 @@ namespace Pos.WebApi.Features.Purchase.Services
             _context.Database.BeginTransaction();
             try
             {
+                currentInvoice.DocDate = request.DocDate;
                 currentInvoice.SupplierCode = request.SupplierCode;
                 currentInvoice.SupplierName = request.SupplierName;
                 currentInvoice.SupplierId = request.SupplierId;
@@ -609,6 +647,7 @@ namespace Pos.WebApi.Features.Purchase.Services
         public List<InvoicePurchaseDto> CanceledInvoicePurchase(int docId)
         {
             var currentInvoice = _context.InvoicePurchase.Where(x => x.DocId == docId).FirstOrDefault();
+            var currentDetail = _context.InvoicePurchaseDetail.Where(x => x.DocId == docId).ToList();
             if (currentInvoice == null) throw new Exception("No existe esta orden, comuniquese con el administrador del sistema.");
             _context.Database.BeginTransaction();
             try
@@ -618,47 +657,47 @@ namespace Pos.WebApi.Features.Purchase.Services
                 _context.InvoicePurchase.Update(currentInvoice);
                 _context.SaveChanges();
                 //Disminuimos inventario
-                var journal = currentInvoice.Detail.Select(x => new ItemJournal
+                var journal = currentDetail.Select(x => new ItemJournal
                 {
                     ItemId = x.ItemId,
                     WhsCode = x.WhsCode,
-                    Quantity = x.Quantity*-1,
-                    Price = x.Price*-1,
-                    TransValue = (x.Price * x.Quantity)*-1,
+                    Quantity = x.Quantity * -1,
+                    Price = x.Price * -1,
+                    TransValue = (x.Price * x.Quantity) * -1,
                     Documents = "Factura de Compra -Anulacion",
                     DocumentReferent = currentInvoice.DocId,
                     CreateBy = currentInvoice.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = currentInvoice.DocDate
 
                 }).ToList();
                 _journalServices.AddLinesJournal(journal);
                 //Actualizamos el inventario del almacen
-                var warehouse = currentInvoice.Detail.Select(x => new ItemWareHouse
+                var warehouse = currentDetail.Select(x => new ItemWareHouse
                 {
                     ItemId = x.ItemId,
                     WhsCode = x.WhsCode,
-                    Stock = x.Quantity,
+                    Stock = x.Quantity * -1,
                     AvgPrice = x.Price,
                     CreateDate = DateTime.Now,
                     DueDate = x.DueDate
                 }).ToList();
                 warehouse.ForEach(x => _wareHouseServices.UpdateItemWareHouse(x));
                 warehouse.ForEach(x => _itemServices.UpdateStockItem(x.ItemId));
-                warehouse.ForEach(x => _priceService.UpdatePriceListDetail(x.ItemId, x.AvgPrice));
+                //  warehouse.ForEach(x => _priceService.UpdatePriceListDetail(x.ItemId, x.AvgPrice));
                 //Aumentamos el saldo por pagar
                 var bpjournal = new BPJornal
                 {
                     BpId = currentInvoice.SupplierId,
                     DocId = currentInvoice.DocId,
                     BpType = "P",
-                    TransValue = currentInvoice.DocTotal*-1,
+                    TransValue = currentInvoice.DocTotal * -1,
                     Documents = "Factura de Compra - Anulacion",
                     DocumentReferent = currentInvoice.DocId,
                     CreateBy = currentInvoice.CreateBy,
                     CreateDate = DateTime.Now
                 };
                 _bPJornalServices.AddLineBPJournal(bpjournal);
-                _supplierServices.UpdateBalanceSupplier(currentInvoice.SupplierId, currentInvoice.DocTotal*-1);
+                _supplierServices.UpdateBalanceSupplier(currentInvoice.SupplierId, currentInvoice.DocTotal * -1);
                 //Si viene de un pedido, abrimos ese pedido
                 if (currentInvoice.DocReference != 0)
                     this.CompleteOrderPurchase(currentInvoice.DocReference, false);
@@ -682,6 +721,7 @@ namespace Pos.WebApi.Features.Purchase.Services
                 currentInvoice.Balance = currentInvoice.Balance - sumApplied;
                 if (currentInvoice.Balance <= 0)
                     currentInvoice.Complete = true;
+                else currentInvoice.Complete = false;
                 _context.InvoicePurchase.Update(currentInvoice);
                 _context.SaveChanges();
             }
@@ -691,11 +731,10 @@ namespace Pos.WebApi.Features.Purchase.Services
             }
             return GetInvoicePurchaseById(docId);
         }
-
         public List<SupplierAccountDto> GetAccountBalance()
         {
             var currentDate = DateTime.Now.Date;
-            var purchase = _context.InvoicePurchase.Where(x => x.Balance > 0).ToList();
+            var purchase = _context.InvoicePurchase.Where(x => x.Balance > 0 && !x.Canceled).ToList();
             var supplierId = purchase.Select(x => x.SupplierId).Distinct().ToList();
             var suppliers = _context.Supplier.Where(x => supplierId.Contains(x.SupplierId)).ToList();
             var payId = suppliers.Select(x => x.PayConditionId).Distinct().ToList();
@@ -718,12 +757,48 @@ namespace Pos.WebApi.Features.Purchase.Services
                                 BalanceDue = p.DueDate < currentDate ? p.Balance : 0,
                                 BalanceAt30Days = (p.DueDate >= currentDate.AddDays(-30) && p.DueDate <= currentDate) ? p.Balance : 0,
                                 BalanceFrom31To60Days = (p.DueDate > currentDate.AddDays(-60) && p.DueDate <= currentDate.AddDays(-30)) ? p.Balance : 0,
-                                BalanceFrom61To90Days =  (p.DueDate >= currentDate.AddDays(-61) && p.DueDate < currentDate.AddDays(-90)) ? p.Balance : 0,
+                                BalanceFrom61To90Days = (p.DueDate >= currentDate.AddDays(-61) && p.DueDate < currentDate.AddDays(-90)) ? p.Balance : 0,
                                 BalanceFrom91To120Days = (p.DueDate >= currentDate.AddDays(-91) && p.DueDate < currentDate.AddDays(-120)) ? p.Balance : 0,
                                 BalanceMoreThan120Days = (p.DueDate < currentDate.AddDays(-121)) ? p.Balance : 0,
-                                DaysExpired = ((p.DueDate.Date - currentDate.Date).Days)*-1 <0? 0 : ((p.DueDate.Date - currentDate.Date).Days) * -1
+                                DaysExpired = ((p.DueDate.Date - currentDate.Date).Days) * -1 < 0 ? 0 : ((p.DueDate.Date - currentDate.Date).Days) * -1
                             }).ToList();
             return response;
+        }
+
+        public string AddPaymentPurchaseCounted(PaymentPurchase request)
+        {
+            request.IsValid();
+            try
+            {
+                request.DocDate = DateTime.Now;
+                request.DocTotal = request.Detail.Sum(x => x.LineTotal);
+                request.Complete = true;
+                request.Canceled = false;
+                _context.PaymentPurchase.Add(request);
+                _context.SaveChanges();
+                //Disminuimos el saldo por pagar
+                var bpjournal = new BPJornal
+                {
+                    BpId = request.SupplierId,
+                    DocId = request.DocId,
+                    BpType = "P",
+                    TransValue = request.DocTotal * -1,
+                    Documents = "Pago de factura de Compra",
+                    DocumentReferent = request.DocId,
+                    CreateBy = request.CreateBy,
+                    CreateDate = DateTime.Now
+                };
+                //Cerramos las facturas
+                request.Detail.ForEach(x => CompleteInvoicePurchase(x.InvoiceId, x.SumApplied));
+                _bPJornalServices.AddLineBPJournal(bpjournal);
+                _supplierServices.UpdateBalanceSupplier(request.SupplierId, request.DocTotal * -1);
+                
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+            return "OK";
         }
     }
 }

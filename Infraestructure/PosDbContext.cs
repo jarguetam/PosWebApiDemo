@@ -69,6 +69,8 @@ namespace Pos.WebApi.Infraestructure
         public DbSet<CostRevaluation> CostRevaluation { get; set; }
         public DbSet<InventoryRequestTransfer> InventoryRequestTransfer { get; set; }
         public DbSet<InventoryRequestTransferDetail> InventoryRequestTransferDetail { get; set; }
+        public DbSet<InventoryReturn> InventoryReturn { get; set; }
+        public DbSet<InventoryReturnDetail> InventoryReturnDetail { get; set; }
 
         //Purchase
         public DbSet<OrderPurchase> OrderPurchase { get; set; }
@@ -151,6 +153,8 @@ namespace Pos.WebApi.Infraestructure
             new CostRevaluation.Map(modelBuilder.Entity<CostRevaluation>());
             new InventoryRequestTransfer.Map(modelBuilder.Entity<InventoryRequestTransfer>());
             new InventoryRequestTransferDetail.Map(modelBuilder.Entity<InventoryRequestTransferDetail>());
+            new InventoryReturn.Map(modelBuilder.Entity<InventoryReturn>());
+            new InventoryReturnDetail.Map(modelBuilder.Entity<InventoryReturnDetail>());
             //Purchase
             new OrderPurchase.Map(modelBuilder.Entity<OrderPurchase>());
             new OrderPurchaseDetail.Map(modelBuilder.Entity<OrderPurchaseDetail>());

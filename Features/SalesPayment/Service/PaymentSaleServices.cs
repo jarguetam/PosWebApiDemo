@@ -94,6 +94,7 @@ namespace Pos.WebApi.Features.SalesPayment.Service
                               CreateByName = u.Name,
                               Complete = e.Complete,
                               Detail = detail.ToList(),
+                              Uuid= e.Uuid,
                           }).ToList();
             return result.OrderByDescending(x => x.DocDate).ToList();
         }
@@ -155,7 +156,8 @@ namespace Pos.WebApi.Features.SalesPayment.Service
             _context.Database.BeginTransaction();
             try
             {
-                request.DocDate = DateTime.Now;
+                DateTime fechaPorDefecto = DateTime.MinValue;
+                request.DocDate = request.DocDate != fechaPorDefecto ? request.DocDate : DateTime.Now;
                 request.Complete = true;
                 request.Canceled = false;
                 _context.PaymentSale.Add(request);
@@ -170,7 +172,7 @@ namespace Pos.WebApi.Features.SalesPayment.Service
                     Documents = "Pago de factura de Venta",
                     DocumentReferent = request.DocId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = request.DocDate
                 };
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _customerService.UpdateBalanceCustomer(request.CustomerId, request.DocTotal * -1);
@@ -260,6 +262,27 @@ namespace Pos.WebApi.Features.SalesPayment.Service
                 throw new Exception(ex.InnerException != null ? ex.InnerException.Message : ex.Message);
             }
             return GetPaymentSaleById(docId);
+        }
+
+        public List<PaymentSaleDto> EditPaymentSale(PaymentSale request)
+        {
+            var currentInvoice = _context.PaymentSale.Where(x => x.DocId == request.DocId).FirstOrDefault();
+            if (currentInvoice == null) throw new Exception("Error: No existe esta orden, comuniquese con el administrador del sistema.");
+            _context.Database.BeginTransaction();
+            try
+            {
+                currentInvoice.Reference = request.Reference;
+                currentInvoice.Comment = request.Comment;
+                _context.PaymentSale.Update(currentInvoice);
+                _context.SaveChanges();       
+                _context.Database.CommitTransaction();
+            }
+            catch (Exception ex)
+            {
+                _context.Database.RollbackTransaction();
+                throw new Exception(ex.InnerException != null ? ex.InnerException.Message : ex.Message);
+            }
+            return GetPaymentSaleById(request.DocId);
         }
 
 

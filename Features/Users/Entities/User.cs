@@ -15,6 +15,7 @@ namespace Pos.WebApi.Features.Users.Entities
         public int ThemeId { get; set; }
         public bool Active { get; set; }
         public bool SalesPerson { get; set; }
+        public bool EditPrice { get; set; }
         public int WhsCode { get; set; }
 
         public int SellerId { get; set; }
@@ -48,6 +49,7 @@ namespace Pos.WebApi.Features.Users.Entities
                 builder.Property(x => x.SalesPerson).HasColumnName("SalesPerson");
                 builder.Property(x => x.WhsCode).HasColumnName("WhsCode");
                 builder.Property(x => x.SellerId).HasColumnName("SellerId");
+                builder.Property(x => x.EditPrice).HasColumnName("EditPrice");
                 builder.Property(x => x.SarCorrelativeId).HasColumnName("SarCorrelativeId");
                 builder.ToTable("User");
             }

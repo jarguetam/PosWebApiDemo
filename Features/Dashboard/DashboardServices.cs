@@ -84,7 +84,7 @@ namespace Pos.WebApi.Features.Dashboard
             DateTime startDate = DateTime.Today.AddDays(-6);
             var last7Days = Enumerable.Range(0, 7).Select(i => startDate.AddDays(i)).ToList();
             var invoice = _context.InvoiceSale
-                .Where(x => x.DocDate >= startDate && (rol == 1 || x.CreateBy == userId))
+                .Where(x => x.DocDate >= startDate && (rol == 1 || x.CreateBy == userId) && !x.Canceled)
                 .GroupBy(x => x.DocDate.Date)
                 .Select(g => new DashboardDto { Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(g.Key.ToString("dddd")), Qty = g.Sum(x => x.SubTotal) })
                 .ToList();
@@ -103,7 +103,7 @@ namespace Pos.WebApi.Features.Dashboard
             var result = _context
                 .OrderSale
                 .Join(_context.Seller, os => os.SellerId, s => s.SellerId, (os, s) => new { OrderSale = os, Seller = s })
-                .Where(x => x.OrderSale.DocDate.Month == DateTime.Now.Month && (rol == 1 || x.OrderSale.CreateBy == userId))
+                .Where(x => x.OrderSale.DocDate.Month == DateTime.Now.Month && (rol == 1 || x.OrderSale.CreateBy == userId) && !x.OrderSale.Canceled)
                 .GroupBy(x => x.Seller.SellerName)
                 .Select(g => new DashboardDto { Description = g.Key, Qty = g.Count() })
                 .ToList();
@@ -168,7 +168,7 @@ namespace Pos.WebApi.Features.Dashboard
                 .Select((m, i) => new DashboardDto { Description = m, Qty = 0 }).ToList();
             var query = (from i in _context.InvoiceSale
                          join id in _context.InvoiceSaleDetail on i.DocId equals id.DocId
-                         where i.Canceled == false && i.DocDate.Year == currentYear && (rol == 1 || i.CreateBy == userId)
+                         where !i.Canceled && i.DocDate.Year == currentYear && (rol == 1 || i.CreateBy == userId)
                          group new { id.Cost, id.Quantity, id.LineTotal } by (i.DocDate.Month) into g
                          select new DashboardDto
                          {
@@ -191,15 +191,23 @@ namespace Pos.WebApi.Features.Dashboard
             var result = _context
                 .InvoiceSale
                 .Join(_context.Seller, os => os.SellerId, s => s.SellerId, (os, s) => new { OrderSale = os, Seller = s })
-                .Where(x => x.OrderSale.DocDate.Month == DateTime.Now.Month && x.OrderSale.Canceled ==false && (rol == 1 || x.OrderSale.CreateBy == userId))
+                .Where(x => x.OrderSale.DocDate.Month == DateTime.Now.Month && !x.OrderSale.Canceled && (rol == 1 || x.OrderSale.CreateBy == userId))
                 .GroupBy(x => x.Seller.SellerName)
                 .Select(g => new DashboardDto { Description = g.Key, Qty = g.Sum(x=> x.OrderSale.SubTotal)})
                 .ToList();
             return result;
         }
-        public List<DashboardDto> GetCXC()
+        public List<DashboardDto> GetCXC(int userId)
         {
-            decimal balanceCustomers = _context.Customer.Sum(x => x.Balance);
+            var rol = _context.User
+               .Where(x => x.UserId == userId)
+               .Select(x => new { x.RoleId, x.SellerId})
+               .FirstOrDefault();
+
+            decimal balanceCustomers = _context.InvoiceSale
+                .Where(x=> (rol.RoleId == 1 || x.SellerId == rol.SellerId))
+                .Sum(x => x.Balance);
+
             var result = new List<DashboardDto>
             {
                 new DashboardDto { Description = "CXC", Qty = balanceCustomers }
@@ -216,7 +224,7 @@ namespace Pos.WebApi.Features.Dashboard
             var result = (from i in _context.InvoiceSale
                           join id in _context.InvoiceSaleDetail on i.DocId equals id.DocId
                           join it in _context.Item on id.ItemId equals it.ItemId
-                          where (rol == 1 || i.CreateBy == userId) && i.DocDate.Year == DateTime.Now.Year
+                          where (rol == 1 || i.CreateBy == userId) && i.DocDate.Year == DateTime.Now.Year && !i.Canceled
                           group new { id.LineTotal, it.ItemName, it.ItemCode } by id.ItemId into grouped
                           orderby grouped.Sum(x => x.LineTotal) descending
                           select new DashboardDto
@@ -236,7 +244,7 @@ namespace Pos.WebApi.Features.Dashboard
             DateTime startDate = DateTime.Today.AddDays(-6);
             var last7Days = Enumerable.Range(0, 7).Select(i => startDate.AddDays(i)).ToList();
             var invoice = _context.InvoicePurchase
-                .Where(x => x.DocDate >= startDate && (rol == 1 || x.CreateBy == userId))
+                .Where(x => x.DocDate >= startDate && (rol == 1 || x.CreateBy == userId) && !x.Canceled)
                 .GroupBy(x => x.DocDate.Date)
                 .Select(g => new DashboardDto { Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(g.Key.ToString("dddd")), Qty = g.Sum(x => x.SubTotal) })
                 .ToList();
@@ -273,9 +281,15 @@ namespace Pos.WebApi.Features.Dashboard
 
             return invoicesByMonth;
         }
-        public List<DashboardDto> GetCXP()
+        public List<DashboardDto> GetCXP(int userId)
         {
-            decimal balanceCustomers = _context.Supplier.Sum(x=> x.Balance);
+            var rol = _context.User
+               .Where(x => x.UserId == userId)
+               .Select(x => new { x.RoleId, x.SellerId })
+               .FirstOrDefault();
+            decimal balanceCustomers = _context.InvoicePurchase
+                 .Where(x => (rol.RoleId == 1 || x.CreateBy == userId))
+                .Sum(x=> x.Balance);
             var result = new List<DashboardDto>
             {
                 new DashboardDto { Description = "CXP", Qty = balanceCustomers }

@@ -9,6 +9,8 @@ using System.Linq;
 using System;
 using Pos.WebApi.Features.Common.Entities;
 using Pos.WebApi.Features.Purchase.Services;
+using Pos.WebApi.Features.Sales.Services;
+using Pos.WebApi.Features.SalesPayment.Dto;
 
 namespace Pos.WebApi.Features.PurchasePayment.Service
 {
@@ -65,6 +67,7 @@ namespace Pos.WebApi.Features.PurchasePayment.Service
                                SubTotal = d.SubTotal,
                                TaxTotal = d.TaxTotal,
                                DiscountTotal = d.DiscountTotal,
+                               SumApplied = d.SumApplied,
                                LineTotal = d.LineTotal,
                                InvoiceDate = d.InvoiceDate
                            }).ToList();
@@ -153,7 +156,8 @@ namespace Pos.WebApi.Features.PurchasePayment.Service
             _context.Database.BeginTransaction();
             try
             {
-                request.DocDate = DateTime.Now;
+                DateTime fechaPorDefecto = DateTime.MinValue;
+                request.DocDate = request.DocDate != fechaPorDefecto ? request.DocDate : DateTime.Now;
                 request.Complete = true;
                 request.Canceled = false;
                 _context.PaymentPurchase.Add(request);
@@ -209,13 +213,50 @@ namespace Pos.WebApi.Features.PurchasePayment.Service
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _supplierServices.UpdateBalanceSupplier(request.SupplierId, request.DocTotal * -1);
                 //Cerramos las facturas
-                request.Detail.Select(x => _purchaseServices.CompleteInvoicePurchase(x.InvoiceId, x.SumApplied));
+                request.Detail.ForEach(x => _purchaseServices.CompleteInvoicePurchase(x.InvoiceId, x.SumApplied));
             }
             catch (Exception ex)
             {
                 throw new Exception(ex.Message);
             }
             return "OK";
+        }
+
+        public List<PaymentPurchaseDto> CanceledPaymentPurchase(int docId)
+        {
+            var currentPayment = _context.PaymentPurchase.Where(x => x.DocId == docId).FirstOrDefault();
+            if (currentPayment == null) throw new Exception("No existe este pago, comuniquese con el administrador del sistema.");
+            _context.Database.BeginTransaction();
+            try
+            {
+                currentPayment.Canceled = true;
+                //Aumentamos el saldo por cobrar
+                var bpjournal = new BPJornal
+                {
+                    BpId = currentPayment.SupplierId,
+                    DocId = currentPayment.DocId,
+                    BpType = "P",
+                    TransValue = currentPayment.DocTotal,
+                    Documents = "Pago de factura de Compra - Anulacion",
+                    DocumentReferent = currentPayment.DocId,
+                    CreateBy = currentPayment.CreateBy,
+                    CreateDate = DateTime.Now
+                };
+                _bPJornalServices.AddLineBPJournal(bpjournal);
+                _supplierServices.UpdateBalanceSupplier(currentPayment.SupplierId, currentPayment.DocTotal);
+                _context.PaymentPurchase.Update(currentPayment);
+                var detail = _context.PaymentPurchaseDetail.Where(x => x.DocId == docId).ToList();
+
+                detail.ForEach(x => _purchaseServices.CompleteInvoicePurchase(x.InvoiceId, x.SumApplied * -1));
+                _context.SaveChanges();
+                _context.Database.CommitTransaction();
+            }
+            catch (Exception ex)
+            {
+                _context.Database.RollbackTransaction();
+                throw new Exception(ex.InnerException != null ? ex.InnerException.Message : ex.Message);
+            }
+            return GetPaymentPurchaseById(docId);
         }
     }
 }

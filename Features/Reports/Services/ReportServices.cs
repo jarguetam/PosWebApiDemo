@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.VisualBasic;
 using Pos.WebApi.Features.Reports.Dto;
 using Pos.WebApi.Features.Sales.Dto;
 using Pos.WebApi.Infraestructure;
@@ -42,7 +43,7 @@ namespace Pos.WebApi.Features.Reports.Services
             var result = (from iw in _context.ItemWareHouse
                           join i in _context.Item on iw.ItemId equals i.ItemId
                           join w in _context.WareHouse on iw.WhsCode equals w.WhsCode
-                          group iw by new { i.ItemCode,i.ItemName, i.AvgPrice, w.WhsName } into g
+                          group iw by new { i.ItemCode,i.ItemName, iw.AvgPrice, w.WhsName } into g
                           orderby g.Key.WhsName, g.Key.ItemCode
                           select new InventoryReportDto
                           {
@@ -109,6 +110,114 @@ namespace Pos.WebApi.Features.Reports.Services
             byte[] pdfBytes = report.ComposeReportSale();
             MemoryStream ms = new(pdfBytes);
             return ms;
+        }
+
+        public MemoryStream GenerateReportCxc(int sellerId)
+        {
+            QuestPDF.Settings.License = LicenseType.Community;
+            string sellerName = sellerId == 0
+            ? "Todos los vendedores"
+            : _context.Seller.FirstOrDefault(x => x.SellerId == sellerId)?.SellerName;
+
+
+            var companyInfo = _context.CompanyInfo.FirstOrDefault();
+            var file = _context.FileUpload.Where(x => x.FileId == companyInfo.FileId).FirstOrDefault();
+
+            // Ejecutar la consulta para obtener los resultados de la base de datos
+            var queryResults = (from invoice in _context.InvoiceSale
+                                join seller in _context.Seller on invoice.SellerId equals seller.SellerId
+                                join customer in _context.Customer on invoice.CustomerId equals customer.CustomerId
+                                where invoice.Balance > 0 && !invoice.Canceled && (sellerId == 0 || invoice.SellerId == sellerId)
+                                group new { invoice, seller } by new { invoice.CustomerCode, invoice.CustomerName, customer.Address } into g
+                                orderby g.Key.CustomerName
+                                select new
+                                {
+                                    CustomerCode = g.Key.CustomerCode,
+                                    CustomerName = $"{g.Key.CustomerName} - {g.Key.Address}",
+                                    Details = g.Select(x => new
+                                    {
+                                        DocNum = x.invoice.DocId,
+                                        Reference = x.invoice.Reference,
+                                        DocDate = x.invoice.DocDate,
+                                        DocDueDate = x.invoice.DueDate,
+                                        DocTotal = x.invoice.DocTotal,
+                                        Balance = x.invoice.Balance,
+                                        SellerName = x.seller.SellerName
+                                    }).ToList()
+                                }).ToList();
+
+            // Calcular los comentarios fuera de la consulta LINQ
+            var result = queryResults.Select(group =>
+            {
+                return new CxcreportDto
+                {
+                    CustomerCode = group.CustomerCode,
+                    CustomerName = group.CustomerName,
+                    Detail = group.Details.Select(detail =>
+                    {
+                        var dueDate = detail.DocDueDate;
+                        return new CxcreportDetailDto
+                        {
+                            DocNum = detail.DocNum,
+                            Reference = detail.Reference,
+                            DocDate = detail.DocDate,
+                            DocDueDate = dueDate,
+                            DocTotal = detail.DocTotal,
+                            Balance = detail.Balance,
+                            Comment = GetCommentForDueDate(dueDate),
+                            SellerName = detail.SellerName,
+                            Days = GetDaysForDueDate(dueDate)
+                        };
+                    }).ToList()
+                };
+            }).ToList();
+
+            // Método para obtener el comentario según la fecha de vencimiento
+            string GetCommentForDueDate(DateTime dueDate)
+            {
+                TimeSpan difference = dueDate.Date - DateTime.Today;
+                if (difference.Days == 0)
+                {
+                    return "**Vence hoy**";
+                }
+                else if (difference.Days > 0)
+                {
+                    return $"Vence en {difference.Days} días";
+                }
+                else
+                {
+                    return $"Venció hace {-difference.Days} días";
+                }
+            }
+
+            int GetDaysForDueDate(DateTime dueDate)
+            {
+                TimeSpan difference = dueDate.Date - DateTime.Today;
+                return difference.Days;
+            }
+
+
+            var report = new CxcReportServices(result, companyInfo, file, sellerName);
+            byte[] pdfBytes = report.ComposeReportSale();
+            MemoryStream ms = new(pdfBytes);
+            return ms;
+        }
+
+        string GetCommentForDueDate(DateTime dueDate)
+        {
+            TimeSpan difference = dueDate.Date - DateTime.Today;
+            if (difference.Days == 0)
+            {
+                return "***Vence hoy***";
+            }
+            else if (difference.Days > 0)
+            {
+                return $"Vence en {difference.Days} días";
+            }
+            else
+            {
+                return $"Venció hace {-difference.Days} días";
+            }
         }
     }
 }

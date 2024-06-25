@@ -43,6 +43,7 @@ namespace Pos.WebApi.Features.Sales.Entities
         public int CorrelativeId { get; set; }
         public decimal PaidToDate { get; set; }
         public decimal Balance { get; set; }
+        public string Uuid { get; set; }
         public List<InvoiceSaleDetail> Detail { get; set; }
         public InvoiceSale()
         {
@@ -104,6 +105,7 @@ namespace Pos.WebApi.Features.Sales.Entities
                 builder.Property(x => x.CorrelativeId).HasColumnName("CorrelativeId");
                 builder.Property(x => x.PaidToDate).HasColumnName("PaidToDate");
                 builder.Property(x => x.Balance).HasColumnName("Balance");
+                builder.Property(x => x.Uuid).HasColumnName("Uuid");
                 builder.HasMany(x => x.Detail).WithOne(x => x.InvoiceSale).HasForeignKey(x => x.DocId);
                 builder.ToTable("InvoiceSale");
             }

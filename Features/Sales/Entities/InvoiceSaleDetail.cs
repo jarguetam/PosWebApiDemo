@@ -18,6 +18,7 @@ namespace Pos.WebApi.Features.Sales.Entities
         public int WhsCode { get; set; }
         public int UnitOfMeasureId { get; set; }
         public bool IsDelete { get; set; }
+        public decimal Weight { get; set; }
         [JsonIgnore]
         public InvoiceSale InvoiceSale { get; set; }
         public bool IsValid()
@@ -45,6 +46,7 @@ namespace Pos.WebApi.Features.Sales.Entities
                 builder.Property(x => x.DueDate).HasColumnName("DueDate");
                 builder.Property(x => x.LineTotal).HasColumnName("LineTotal");
                 builder.Property(x => x.IsDelete).HasColumnName("IsDelete");
+                builder.Property(x => x.Weight).HasColumnName("Weight");
                 builder.HasOne(x => x.InvoiceSale).WithMany(x => x.Detail).HasForeignKey(x => x.DocId);
                 builder.ToTable("InvoiceSaleDetail");
             }

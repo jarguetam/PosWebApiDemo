@@ -59,6 +59,7 @@ namespace Pos.WebApi.Features.Auth
                 Token = GenerateJwtToken(employee),
                 WhsCode = employee.WhsCode,
                 SellerId = employee.SellerId,
+                EditPrice = employee.EditPrice,
                 SarCorrelativeId = employee.SarCorrelativeId,
                 SellerName = _context.Seller.Where(x=> x.SellerId == employee.SellerId).Select(x=> x.SellerName).FirstOrDefault()
             };

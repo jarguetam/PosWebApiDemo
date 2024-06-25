@@ -1,6 +1,7 @@
 ﻿using Pos.WebApi.Features.InventoryTransactions.Dto;
 using Pos.WebApi.Features.InventoryTransactions.Entities;
 using Pos.WebApi.Infraestructure;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -27,9 +28,10 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
             _context.SaveChanges();
         }
 
-        public List<ItemJournalDto> GetJornalItems(int itemId)
+        public List<ItemJournalDto> GetJornalItems(int itemId, DateTime from, DateTime to, int whsCode)
         {
-            var journal = _context.ItemJournal.Where(x => x.ItemId == itemId).ToList();
+            var journal = _context.ItemJournal.Where(x => x.ItemId == itemId && x.CreateDate.Date >= from.Date && x.CreateDate.Date <= to.Date
+            && (whsCode == 0 || x.WhsCode==whsCode)).ToList();
             var items = _context.Item.Where(x => x.ItemId == itemId).ToList();
             var userId = journal.Select(x => x.CreateBy).Distinct().ToList();
             var users = _context.User.Where(x => userId.Contains(x.UserId)).ToList();
@@ -39,7 +41,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                           join i in items on j.ItemId equals i.ItemId
                           join u in users on j.CreateBy equals u.UserId
                           join w in whs on j.WhsCode equals w.WhsCode
-                          orderby j.CreateDate
+                          orderby j.CreateDate descending
                           select new ItemJournalDto
                           {
                               ItemJournalId = j.ItemJournalId,

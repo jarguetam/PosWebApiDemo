@@ -65,7 +65,7 @@ namespace Pos.WebApi.Features.Liquidations.Services
 
         public List<LiquidationDto> GetLiquidationByDate(DateTime From, DateTime To)
         {
-            return GetLiquidationBase(x => x.CreatedDate.Date >= From.Date && x.CreatedDate.Date <= To.Date).ToList();
+            return GetLiquidationBase(x => x.From.Date >= From.Date && x.To.Date <= To.Date).ToList();
         }
         public List<LiquidationView> GetLiquidationsBySellerAndDate(DateTime From, DateTime To, int sellerId)
         {

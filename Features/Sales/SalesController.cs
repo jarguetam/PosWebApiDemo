@@ -223,9 +223,16 @@ namespace Pos.WebApi.Features.Sales
             catch (Exception ex)
             {
                 var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+
+                if (mensaje.Contains("Cannot insert duplicate key row") && mensaje.Contains("Factura_ya_sincronizada"))
+                {
+                    return BadRequest(new { message = "Error: Esta factura ya existe en la base de datos. UUID" });
+                }
+
                 return BadRequest(new { message = mensaje });
-            }
+                }
         }
+
 
         [HttpPut("UpdateInvoiceSale")]
         public IActionResult UpdateInvoiceSale(InvoiceSale request)

@@ -1,4 +1,5 @@
-﻿using Org.BouncyCastle.Asn1.Ocsp;
+﻿using Microsoft.EntityFrameworkCore;
+using Org.BouncyCastle.Asn1.Ocsp;
 using Pos.WebApi.Features.InventoryTransactions.Dto;
 using Pos.WebApi.Features.InventoryTransactions.Entities;
 using Pos.WebApi.Features.Items.Dto;
@@ -8,6 +9,7 @@ using Pos.WebApi.Infraestructure;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 
 namespace Pos.WebApi.Features.InventoryTransactions.Services
@@ -218,7 +220,9 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
             _context.Database.BeginTransaction();
             try
             {
-                request.EntryDate = DateTime.Now;
+                DateTime fechaPorDefecto = DateTime.MinValue;
+                request.EntryDate = request.EntryDate != fechaPorDefecto ? request.EntryDate : DateTime.Now;
+                request.CreateDate = DateTime.Now;
                 request.DocTotal = request.Detail.Sum(x => x.LineTotal);
                 _context.InventoryEntry.Add(request);
                 _context.SaveChanges();
@@ -232,8 +236,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                     Documents = "Entrada de mercancia",
                     DocumentReferent = request.EntryId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
-
+                    CreateDate = request.EntryDate
                 }).ToList();
                 _journalServices.AddLinesJournal(journal);
                 var warehouse = request.Detail.Select(x => new ItemWareHouse
@@ -242,7 +245,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                     WhsCode = x.WhsCode,
                     Stock = x.Quantity,
                     AvgPrice = x.Price,
-                    CreateDate = DateTime.Now,
+                    CreateDate = request.EntryDate,
                     DueDate = x.DueDate
                 }).ToList();
                 warehouse.ForEach(x=> _wareHouseServices.UpdateItemWareHouse(x));
@@ -387,7 +390,9 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
             _context.Database.BeginTransaction();
             try
             {
-                request.OutputDate = DateTime.Now;
+                DateTime fechaPorDefecto = DateTime.MinValue;
+                request.OutputDate = request.OutputDate != fechaPorDefecto ? request.OutputDate : DateTime.Now;
+                request.CreatedDate = DateTime.Now;
                 request.DocTotal = request.Detail.Sum(x => x.LineTotal);
                 _context.InventoryOutPut.Add(request);
                 _context.SaveChanges();
@@ -401,7 +406,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                     Documents = "Salida de mercancia",
                     DocumentReferent = request.OutputId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = request.OutputDate
 
                 }).ToList();
                 _journalServices.AddLinesJournal(journal);
@@ -411,7 +416,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                     WhsCode = x.WhsCode,
                     Stock = x.Quantity * -1,
                     AvgPrice = x.Price,
-                    CreateDate = DateTime.Now,
+                    CreateDate = request.OutputDate,
                     DueDate = x.DueDate
                 }).ToList();
                 warehouse.ForEach(x => _wareHouseServices.UpdateItemWareHouse(x));
@@ -421,7 +426,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
             catch (Exception ex)
             {
                 _context.Database.RollbackTransaction();
-                throw new Exception(ex.Message);
+                throw new Exception(ex.InnerException != null ? ex.InnerException.Message : ex.Message);
             }
             return GetOutPutById(request.OutputId);
         }
@@ -467,6 +472,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                                ItemCode = i.ItemCode,
                                ItemName = i.ItemName,
                                Quantity = d.Quantity,
+                               
                                UnitOfMeasureName = u.UnitOfMeasureName,
                                UnitOfMeasureId = u.UnitOfMeasureId,
                                Price = d.Price,
@@ -563,7 +569,8 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
             _context.Database.BeginTransaction();
             try
             {
-                request.TransferDate = DateTime.Now;
+                DateTime fechaPorDefecto = DateTime.MinValue;
+                request.TransferDate = request.TransferDate != fechaPorDefecto ? request.TransferDate : DateTime.Now;
                 request.Detail = UpdateCost(request.Detail);
                 request.Detail.ForEach(x => x.LineTotal = (x.Quantity * x.Price));
                 request.DocTotal = request.Detail.Sum(x => x.LineTotal);
@@ -580,7 +587,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                     Documents = "Transferencia de mercancia",
                     DocumentReferent = request.TransferId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = request.TransferDate
 
                 }).ToList();
                 var journalFromWhsCode = request.Detail.Select(x => new ItemJournal
@@ -593,7 +600,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                     Documents = "Transferencia de mercancia",
                     DocumentReferent = request.TransferId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = request.TransferDate
 
                 }).ToList();
                 _journalServices.AddLinesJournal(journalToWhsCode);
@@ -869,6 +876,181 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
             price = _context.ItemWareHouse.Where(x => x.ItemId == itemId && x.WhsCode == whsCode).Select(x => x.AvgPrice).FirstOrDefault();
             return price;
         }
-        
+
+        //InventoryReturn
+        public List<InventoryReturnDto> GetBaseInventoryReturn(Expression<Func<InventoryReturn, bool>> condition)
+        {
+            var result = _context.InventoryReturn
+                .Include(ci => ci.Detail)
+                .Where(condition)
+                .Join(_context.Seller, inv => inv.SellerId, s => s.SellerId, (inv, s) => new { InventoryReturn = inv, Seller = s })
+                .Join(_context.SellerRegion, combined => combined.Seller.RegionId, sr => sr.RegionId, (combined, sr) => new { combined.InventoryReturn, combined.Seller, SellerRegion = sr })
+                .Join(_context.WareHouse, combined => combined.InventoryReturn.WhsCode, wh => wh.WhsCode, (combined, wh) => new { combined.InventoryReturn, combined.Seller, combined.SellerRegion, WareHouse = wh })
+                .Join(_context.User, combined => combined.InventoryReturn.CreatedBy, u => u.UserId, (combined, u) => new { combined.InventoryReturn, combined.Seller, combined.SellerRegion, combined.WareHouse, User = u })
+
+                .Select(combined => new InventoryReturnDto
+                {
+                    Id = combined.InventoryReturn.Id,
+                    DocDate = combined.InventoryReturn.DocDate,
+                    SellerId = combined.InventoryReturn.SellerId,
+                    RegionId = combined.InventoryReturn.RegionId,
+                    WhsCode = combined.InventoryReturn.WhsCode,
+                    CreatedDate = combined.InventoryReturn.CreatedDate,
+                    CreatedBy = combined.InventoryReturn.CreatedBy,
+                    Canceled = combined.InventoryReturn.Canceled,
+                    Active = combined.InventoryReturn.Active,
+                    SellerName = combined.Seller.SellerName,
+                    RegionName = combined.SellerRegion.NameRegion,
+                    WhsName = combined.WareHouse.WhsName,
+                    CreatedByName = combined.User.Name,
+                    Complete = combined.InventoryReturn.Complete,
+                    Detail = combined.InventoryReturn.Detail
+                })
+                .ToList();
+            return result;
+        }
+
+
+        public List<InventoryReturnDto> GetInventoryReturnByDate(DateTime fro, DateTime to)
+        {
+            return GetBaseInventoryReturn(x => x.DocDate.Date >= fro.Date && x.DocDate.Date <= to.Date);
+        }
+
+        public List<InventoryReturnDto> AddInventoryReturn(InventoryReturn request)
+        {
+            try
+            {
+                request.CreatedDate = DateTime.Now;
+                request.Detail.ForEach(x => x.IdDetail = 0);
+                _context.InventoryReturn.Add(request);
+                _context.SaveChanges();
+                return GetBaseInventoryReturn(x => x.DocDate.Date >= request.DocDate.Date && x.DocDate.Date <= request.DocDate.Date);
+            }
+            catch(Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                throw new Exception(mensaje);
+            }
+        }
+
+        public List<InventoryReturnDto> UpdateInventoryReturn(InventoryReturn request)
+        {
+            try
+            {
+                // Buscar la entidad que se desea actualizar
+                var existingInventoryReturn = _context.InventoryReturn.Include(ir => ir.Detail).FirstOrDefault(x => x.Id == request.Id);
+                if (existingInventoryReturn != null)
+                {
+                    // Actualizar propiedades individuales
+                    existingInventoryReturn.SellerId = request.SellerId;
+                    existingInventoryReturn.RegionId = request.RegionId;
+                    existingInventoryReturn.WhsCode = request.WhsCode;
+                    existingInventoryReturn.DocDate = request.DocDate;
+                    existingInventoryReturn.CreatedBy = request.CreatedBy;
+
+                    // Manejo del detalle
+                    if (request.Detail != null)
+                    {
+
+                        // Elimina detalles antiguos
+                        _context.InventoryReturnDetail.RemoveRange(existingInventoryReturn.Detail);
+                        existingInventoryReturn.Detail.Clear();
+
+                        // Agrega los nuevos detalles
+                        foreach (var detail in request.Detail)
+                        {
+                            detail.IdDetail = 0;
+                            detail.IdReturn = request.Id;
+                            existingInventoryReturn.Detail.Add(detail);
+                        }
+                    }
+                    _context.InventoryReturnDetail.AddRange(existingInventoryReturn.Detail);
+                    _context.InventoryReturn.Update(existingInventoryReturn);
+                    int affectedRows = _context.SaveChanges();
+
+                    if (affectedRows == 0)
+                    {
+                        throw new DbUpdateConcurrencyException("No rows were affected. The entity may have been modified or deleted.");
+                    }
+                }
+                else
+                {
+                    throw new Exception("Entity not found.");
+                }
+
+                return GetBaseInventoryReturn(x => x.DocDate.Date >= request.DocDate.Date && x.DocDate.Date <= request.DocDate.Date);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                // Manejo específico de excepciones de concurrencia
+                var mensaje = "Concurrency conflict: " + ex.Message;
+                throw new Exception(mensaje);
+            }
+            catch (Exception ex)
+            {
+                // Manejo de otras excepciones
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                throw new Exception(mensaje);
+            }
+        }
+
+
+        public List<InventoryReturnDto> CompleteInventoryReturn(InventoryReturn request)
+        {
+            try
+            {
+                // Buscar la entidad que se desea actualizar
+                var existingInventoryReturn = _context.InventoryReturn.Include(ir => ir.Detail).FirstOrDefault(x => x.Id == request.Id);
+                if (existingInventoryReturn != null)
+                {      
+                    existingInventoryReturn.Complete = request.Complete;
+                    _context.InventoryReturn.Update(existingInventoryReturn);
+                    _context.SaveChanges();
+                }
+                return GetBaseInventoryReturn(x => x.DocDate.Date >= request.DocDate.Date && x.DocDate.Date <= request.DocDate.Date);
+            }
+            catch (Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                throw new Exception(mensaje);
+            }
+        }
+        public List<InventoryReturnDetail> GetResumenReturn(DateTime date, int whsCode)
+        {
+            var exist = _context.InventoryReturn.Include(x => x.Detail)
+                .Where(x => x.DocDate.Date == date.Date && x.WhsCode == whsCode)
+                .FirstOrDefault();
+            if(exist != null)
+            {
+                if (exist.Complete)
+                {
+                    throw new Exception("Para este vendedor ya se realizo la devolucion del dia seleccionado.");
+                }
+            }
+            var resumenReturn = _context.InventoryReturnDetail
+                .FromSqlRaw($@"
+                            EXEC [dbo].[ObtenerResumenItemsDevolucion] 
+                            @Fecha = '{date.ToString("yyyy-MM-dd")}',
+                            @AlmacenCode = {whsCode}
+                            ")
+                .ToList();
+
+            if (exist != null)
+            {
+                var existDetails = exist.Detail.ToDictionary(d => d.ItemId);
+                foreach (var item in resumenReturn)
+                {
+                    if (existDetails.TryGetValue(item.ItemId, out var existingDetail))
+                    {
+                        item.QuantityReturn = existingDetail.QuantityReturn;
+                    }
+                    else
+                    {
+                        item.IdDetail = 0;
+                    }
+                }
+            }
+            return resumenReturn;
+        }
     }
 }

@@ -18,12 +18,12 @@ namespace Pos.WebApi.Features.InventoryTransactions
             _services = services;
         }
 
-        [HttpGet("GetItemJornal{itemId}")]
-        public IActionResult GetInventoryEntry(int itemId)
+        [HttpGet("GetItemJornal{itemId}/{from}/{to}/{whsCode}")]
+        public IActionResult GetInventoryEntry(int itemId,DateTime from, DateTime to, int whsCode)
         {
             try
             {
-                var result = _services.GetJornalItems(itemId);
+                var result = _services.GetJornalItems(itemId, from, to, whsCode);
                 return Ok(result);
             }
             catch (Exception ex)

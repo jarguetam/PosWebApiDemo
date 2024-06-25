@@ -223,7 +223,7 @@ namespace Pos.WebApi.Features.Customers.Services
             currentPrice.UpdateDate = DateTime.Now;
             currentPrice.Active = request.Active;
             var listDetail = GetPriceListDetail(request.ListPriceId);
-            listDetail.ForEach(x => UpdatePriceListDetail(x.ItemId, 0));
+           // listDetail.ForEach(x => UpdatePriceListDetail(x.ItemId, 0));
             _context.SaveChanges();
             return GetPriceList();
         }

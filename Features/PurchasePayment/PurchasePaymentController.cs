@@ -111,7 +111,7 @@ namespace Pos.WebApi.Features.PurchasePayment
         {
             try
             {
-                var result = "";// _paymentServices.CanceledPaymentPurchase(docId);
+                var result = _paymentServices.CanceledPaymentPurchase(docId);
                 return Ok(result);
             }
             catch (Exception ex)

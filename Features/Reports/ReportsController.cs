@@ -11,7 +11,7 @@ namespace Pos.WebApi.Features.Reports
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]
+    //[Authorize]
     public class ReportsController : ControllerBase
     {
         private readonly ReportServices _service;
@@ -55,6 +55,13 @@ namespace Pos.WebApi.Features.Reports
         {
             var ms = _service.GenerateReportSalesDate(from, to);
             return new FileStreamResult(ms, "application/pdf");            
+        }
+
+        [HttpGet("GetCXCReport{idseller}")]
+        public IActionResult GetCXCReport(int idseller)
+        {
+            var ms = _service.GenerateReportCxc(idseller);
+            return new FileStreamResult(ms, "application/pdf");
         }
 
     }

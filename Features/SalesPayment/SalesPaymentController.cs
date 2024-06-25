@@ -88,6 +88,12 @@ namespace Pos.WebApi.Features.SalesPayment
             catch (Exception ex)
             {
                 var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+
+                if (mensaje.Contains("Cannot insert duplicate key row") && mensaje.Contains("Pago_ya_sincronizada"))
+                {
+                    return BadRequest(new { message = "Error: Este pago ya existe en la base de datos. UUID" });
+                }
+
                 return BadRequest(new { message = mensaje });
             }
         }
@@ -97,7 +103,7 @@ namespace Pos.WebApi.Features.SalesPayment
         {
             try
             {
-                var result = "";//_paymentServices.EditPaymentSales(request);
+                var result = _paymentServices.EditPaymentSale(request);
                 return Ok(result);
             }
             catch (Exception ex)

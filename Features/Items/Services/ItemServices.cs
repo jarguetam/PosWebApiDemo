@@ -268,140 +268,177 @@ namespace Pos.WebApi.Features.Items.Services
         }
         public List<ItemDto> GetItem()
         {
-            var item = _context.Item.ToList();
-            var userId = item.Select(x => x.CreateBy).Distinct().ToList();
-            var user = _context.User.Where(x => userId.Contains(x.UserId)).ToList();
-            var categoryId = item.Select(x => x.ItemCategoryId).Distinct().ToList();
-            var category = _context.ItemCategory.Where(x => categoryId.Contains(x.ItemCategoryId)).ToList();
-            var unitId = item.Select(x => x.UnitOfMeasureId).Distinct().ToList();
-            var unit = _context.UnitOfMeasure.Where(x => unitId.Contains(x.UnitOfMeasureId)).ToList();
-            var familyIds = item.Select(x => x.ItemFamilyId).ToList();
-            var family = _context.ItemFamily.Where(x => familyIds.Contains(x.ItemFamilyId)).ToList();
+            var itemQuery = (from i in _context.Item
+                             join c in _context.ItemCategory on i.ItemCategoryId equals c.ItemCategoryId
+                             join um in _context.UnitOfMeasure on i.UnitOfMeasureId equals um.UnitOfMeasureId
+                             join f in _context.ItemFamily on i.ItemFamilyId equals f.ItemFamilyId
+                             join u in _context.User on i.CreateBy equals u.UserId
+                             select new ItemDto
+                             {
+                                 ItemId = i.ItemId,
+                                 ItemCode = i.ItemCode,
+                                 ItemName = i.ItemName,
+                                 UnitOfMeasureId = i.UnitOfMeasureId,
+                                 UnitOfMeasureName = um.UnitOfMeasureName,
+                                 ItemCategoryId = i.ItemCategoryId,
+                                 ItemCategoryName = c.ItemCategoryName,
+                                 ItemFamilyId = i.ItemFamilyId,
+                                 ItemFamilyName = f.ItemFamilyName,
+                                 Stock = i.Stock,
+                                 AvgPrice = i.AvgPrice,
+                                 PricePurchase = i.PricePurchase,
+                                 Tax = i.Tax,
+                                 SalesItem = i.SalesItem,
+                                 PurchaseItem = i.PurchaseItem,
+                                 InventoryItem = i.InventoryItem,
+                                 Weight = i.Weight,
+                                 BarCode = i.BarCode,
+                                 CreateBy = c.CreateBy,
+                                 CreateByName = u.Name,
+                                 CreateDate = c.CreateDate,
+                                 Active = i.Active
+                             }).ToList();
 
-            var result = (from i in item
-                          join c in category on i.ItemCategoryId equals c.ItemCategoryId
-                          join um in unit on i.UnitOfMeasureId equals um.UnitOfMeasureId
-                          join f in family on i.ItemFamilyId equals f.ItemFamilyId
-                          join u in user on i.CreateBy equals u.UserId
-                          select new ItemDto
-                          {
-                              ItemId = i.ItemId,
-                              ItemCode = i.ItemCode,
-                              ItemName = i.ItemName,
-                              UnitOfMeasureId = i.UnitOfMeasureId,
-                              UnitOfMeasureName = um.UnitOfMeasureName,
-                              ItemCategoryId = i.ItemCategoryId,
-                              ItemCategoryName = c.ItemCategoryName,
-                              ItemFamilyId = i.ItemFamilyId,
-                              ItemFamilyName = f.ItemFamilyName,
-                              Stock = i.Stock,
-                              AvgPrice = i.AvgPrice,
-                              PricePurchase = i.PricePurchase,
-                              Tax = i.Tax,
-                              SalesItem = i.SalesItem,
-                              PurchaseItem = i.PurchaseItem,
-                              InventoryItem = i.InventoryItem,
-                              Weight = i.Weight,
-                              BarCode = i.BarCode,
-                              ItemWareHouse = _wareHouseServices.GetItemWareHouse(i.ItemId),
-                              CreateBy = c.CreateBy,
-                              CreateByName = u.Name,
-                              CreateDate = c.CreateDate,
-                              Active = i.Active
-                          }).ToList();
-            return result;
+            var itemIds = itemQuery.Select(i => i.ItemId).ToList();
+
+            var itemWareHouseQuery = (from iw in _context.ItemWareHouse
+                                      join wh in _context.WareHouse on iw.WhsCode equals wh.WhsCode
+                                      where itemIds.Contains(iw.ItemId)
+                                      select new ItemWareHouseDto
+                                      {
+                                          ItemId = iw.ItemId,
+                                          WhsCode = iw.WhsCode,
+                                          WhsName = wh.WhsName,
+                                          Stock = iw.Stock,
+                                          AvgPrice = iw.AvgPrice,
+                                          DueDate = iw.DueDate,
+                                          CreateDate = wh.CreateDate,
+                                          Active = wh.Active
+                                      }).ToList();
+
+            foreach (var item in itemQuery)
+            {
+                item.ItemWareHouse = itemWareHouseQuery.Where(iw => iw.ItemId == item.ItemId).ToList();
+            }
+
+            return itemQuery;
         }
-
         public List<ItemDto> GetItemByBarcode(string barcode)
         {
-            var item = _context.Item.Where(x => x.BarCode == barcode || x.ItemCode == barcode).ToList();
-            var userId = item.Select(x => x.CreateBy).Distinct().ToList();
-            var user = _context.User.Where(x => userId.Contains(x.UserId)).ToList();
-            var categoryId = item.Select(x => x.ItemCategoryId).Distinct().ToList();
-            var category = _context.ItemCategory.Where(x => categoryId.Contains(x.ItemCategoryId)).ToList();
-            var unitId = item.Select(x => x.UnitOfMeasureId).Distinct().ToList();
-            var unit = _context.UnitOfMeasure.Where(x => unitId.Contains(x.UnitOfMeasureId)).ToList();
-            var familyIds = item.Select(x => x.ItemFamilyId).ToList();
-            var family = _context.ItemFamily.Where(x => familyIds.Contains(x.ItemFamilyId)).ToList();
+            var itemQuery = (from i in _context.Item
+                             join c in _context.ItemCategory on i.ItemCategoryId equals c.ItemCategoryId
+                             join um in _context.UnitOfMeasure on i.UnitOfMeasureId equals um.UnitOfMeasureId
+                             join f in _context.ItemFamily on i.ItemFamilyId equals f.ItemFamilyId
+                             join u in _context.User on i.CreateBy equals u.UserId
+                             where i.BarCode == barcode || i.ItemCode == barcode
+                             select new ItemDto
+                             {
+                                 ItemId = i.ItemId,
+                                 ItemCode = i.ItemCode,
+                                 ItemName = i.ItemName,
+                                 UnitOfMeasureId = i.UnitOfMeasureId,
+                                 UnitOfMeasureName = um.UnitOfMeasureName,
+                                 ItemCategoryId = i.ItemCategoryId,
+                                 ItemCategoryName = c.ItemCategoryName,
+                                 ItemFamilyId = i.ItemFamilyId,
+                                 ItemFamilyName = f.ItemFamilyName,
+                                 Stock = i.Stock,
+                                 AvgPrice = i.AvgPrice,
+                                 PricePurchase = i.PricePurchase,
+                                 Tax = i.Tax,
+                                 SalesItem = i.SalesItem,
+                                 PurchaseItem = i.PurchaseItem,
+                                 InventoryItem = i.InventoryItem,
+                                 Weight = i.Weight,
+                                 BarCode = i.BarCode,
+                                 CreateBy = c.CreateBy,
+                                 CreateByName = u.Name,
+                                 CreateDate = c.CreateDate,
+                                 Active = i.Active
+                             }).ToList();
 
-            var result = (from i in item
-                          join c in category on i.ItemCategoryId equals c.ItemCategoryId
-                          join um in unit on i.UnitOfMeasureId equals um.UnitOfMeasureId
-                          join f in family on i.ItemFamilyId equals f.ItemFamilyId
-                          join u in user on i.CreateBy equals u.UserId
-                          select new ItemDto
-                          {
-                              ItemId = i.ItemId,
-                              ItemCode = i.ItemCode,
-                              ItemName = i.ItemName,
-                              UnitOfMeasureId = i.UnitOfMeasureId,
-                              UnitOfMeasureName = um.UnitOfMeasureName,
-                              ItemCategoryId = i.ItemCategoryId,
-                              ItemCategoryName = c.ItemCategoryName,
-                              ItemFamilyId = i.ItemFamilyId,
-                              ItemFamilyName = f.ItemFamilyName,
-                              Stock = i.Stock,
-                              AvgPrice = i.AvgPrice,
-                              PricePurchase = i.PricePurchase,
-                              Tax = i.Tax,
-                              SalesItem = i.SalesItem,
-                              PurchaseItem = i.PurchaseItem,
-                              InventoryItem = i.InventoryItem,
-                              Weight = i.Weight,
-                              BarCode = i.BarCode,
-                              ItemWareHouse = _wareHouseServices.GetItemWareHouse(i.ItemId),
-                              CreateBy = c.CreateBy,
-                              CreateByName = u.Name,
-                              CreateDate = c.CreateDate,
-                              Active = i.Active
-                          }).ToList();
-            return result;
+            var itemIds = itemQuery.Select(i => i.ItemId).ToList();
+
+            var itemWareHouseQuery = (from iw in _context.ItemWareHouse
+                                      join wh in _context.WareHouse on iw.WhsCode equals wh.WhsCode
+                                      where itemIds.Contains(iw.ItemId)
+                                      select new ItemWareHouseDto
+                                      {
+                                          ItemId = iw.ItemId,
+                                          WhsCode = iw.WhsCode,
+                                          WhsName = wh.WhsName,
+                                          Stock = iw.Stock,
+                                          AvgPrice = iw.AvgPrice,
+                                          DueDate = iw.DueDate,
+                                          CreateDate = wh.CreateDate,
+                                          Active = wh.Active
+                                      }).ToList();
+
+            foreach (var item in itemQuery)
+            {
+                item.ItemWareHouse = itemWareHouseQuery.Where(iw => iw.ItemId == item.ItemId).ToList();
+            }
+
+            return itemQuery;
         }
 
         public List<ItemDto> GetItemActive()
         {
-            var item = _context.Item.Where(x => x.Active == true && x.InventoryItem == true).ToList();
-            var userId = item.Select(x => x.CreateBy).Distinct().ToList();
-            var user = _context.User.Where(x => userId.Contains(x.UserId)).ToList();
-            var categoryId = item.Select(x => x.ItemCategoryId).Distinct().ToList();
-            var category = _context.ItemCategory.Where(x => categoryId.Contains(x.ItemCategoryId)).ToList();
-            var unitId = item.Select(x => x.UnitOfMeasureId).Distinct().ToList();
-            var unit = _context.UnitOfMeasure.Where(x => unitId.Contains(x.UnitOfMeasureId)).ToList();
-            var familyIds = item.Select(x => x.ItemFamilyId).ToList();
-            var family = _context.ItemFamily.Where(x => familyIds.Contains(x.ItemFamilyId)).ToList();
+            var itemQuery = (from i in _context.Item
+                              join c in _context.ItemCategory on i.ItemCategoryId equals c.ItemCategoryId
+                              join um in _context.UnitOfMeasure on i.UnitOfMeasureId equals um.UnitOfMeasureId
+                              join f in _context.ItemFamily on i.ItemFamilyId equals f.ItemFamilyId
+                              join u in _context.User on i.CreateBy equals u.UserId
+                             where i.Active && i.InventoryItem
+                             select new ItemDto
+                              {
+                                  ItemId = i.ItemId,
+                                  ItemCode = i.ItemCode,
+                                  ItemName = i.ItemName,
+                                  UnitOfMeasureId = i.UnitOfMeasureId,
+                                  UnitOfMeasureName = um.UnitOfMeasureName,
+                                  ItemCategoryId = i.ItemCategoryId,
+                                  ItemCategoryName = c.ItemCategoryName,
+                                  ItemFamilyId = i.ItemFamilyId,
+                                  ItemFamilyName = f.ItemFamilyName,
+                                  Stock = i.Stock,
+                                  AvgPrice = i.AvgPrice,
+                                  PricePurchase = i.PricePurchase,
+                                  Tax = i.Tax,
+                                  SalesItem = i.SalesItem,
+                                  PurchaseItem = i.PurchaseItem,
+                                  InventoryItem = i.InventoryItem,
+                                  Weight = i.Weight,
+                                  BarCode = i.BarCode,
+                                  CreateBy = c.CreateBy,
+                                  CreateByName = u.Name,
+                                  CreateDate = c.CreateDate,
+                                  Active = i.Active
+                              }).ToList();
 
-            var result = (from i in item
-                          join c in category on i.ItemCategoryId equals c.ItemCategoryId
-                          join um in unit on i.UnitOfMeasureId equals um.UnitOfMeasureId
-                          join f in family on i.ItemFamilyId equals f.ItemFamilyId
-                          join u in user on i.CreateBy equals u.UserId
-                          select new ItemDto
-                          {
-                              ItemId = i.ItemId,
-                              ItemCode = i.ItemCode,
-                              ItemName = i.ItemName,
-                              UnitOfMeasureId = i.UnitOfMeasureId,
-                              UnitOfMeasureName = um.UnitOfMeasureName,
-                              ItemCategoryId = i.ItemCategoryId,
-                              ItemCategoryName = c.ItemCategoryName,
-                              ItemFamilyId = i.ItemFamilyId,
-                              ItemFamilyName = f.ItemFamilyName,
-                              Stock = i.Stock,
-                              AvgPrice = i.AvgPrice,
-                              PricePurchase = i.PricePurchase,
-                              Tax = i.Tax,
-                              SalesItem = i.SalesItem,
-                              PurchaseItem = i.PurchaseItem,
-                              InventoryItem = i.InventoryItem,
-                              Weight = i.Weight,
-                              BarCode = i.BarCode,
-                              ItemWareHouse = _wareHouseServices.GetItemWareHouse(i.ItemId),
-                              CreateBy = c.CreateBy,
-                              CreateByName = u.Name,
-                              CreateDate = c.CreateDate,
-                              Active = c.Active
-                          }).ToList();
-            return result;
+            var itemIds = itemQuery.Select(i => i.ItemId).ToList();
+
+            var itemWareHouseQuery = (from iw in _context.ItemWareHouse
+                                      join wh in _context.WareHouse on iw.WhsCode equals wh.WhsCode
+                                      where itemIds.Contains(iw.ItemId)
+                                      select new ItemWareHouseDto
+                                      {
+                                          ItemId = iw.ItemId,
+                                          WhsCode = iw.WhsCode,
+                                          WhsName = wh.WhsName,
+                                          Stock = iw.Stock,
+                                          AvgPrice = iw.AvgPrice,
+                                          DueDate = iw.DueDate,
+                                          CreateDate = wh.CreateDate,
+                                          Active = wh.Active
+                                      }).ToList();
+
+            foreach (var item in itemQuery)
+            {
+                item.ItemWareHouse = itemWareHouseQuery.Where(iw => iw.ItemId == item.ItemId).ToList();
+            }
+
+            return itemQuery;
 
         }
 
@@ -602,7 +639,8 @@ namespace Pos.WebApi.Features.Items.Services
                               PriceSales = s?.PriceSpecial ?? p.Price,
                               Tax = i.Tax,
                               BarCode = i.BarCode,
-                              Active = c.Active
+                              Active = c.Active,
+                              Weight = i.Weight,
                           }).ToList();
             return result;
         }
@@ -682,7 +720,6 @@ namespace Pos.WebApi.Features.Items.Services
         }
         public void UpdateStockItem(int itemid)
         {
-
             var item = _context.Item.Where(x => x.ItemId == itemid).FirstOrDefault();
             if(item.InventoryItem)
             {
@@ -691,8 +728,15 @@ namespace Pos.WebApi.Features.Items.Services
                 var currentItem = _context.Item.Where(x => x.ItemId == itemid).FirstOrDefault();
                 if (currentItem == null) throw new Exception("No existe este articulo, comuniquese con el administrador del sistema.");
                 currentItem.Stock = stock;
-                if (itemWareHouse.Sum(x => x.Stock) != 0)
-                    currentItem.AvgPrice = (itemWareHouse.Sum(x=>x.Stock*x.AvgPrice))/ itemWareHouse.Sum(x => x.Stock);//Promedio ponderado
+                if (currentItem.Stock >= 0 && itemWareHouse.Sum(x => x.Stock) != 0)
+                {
+                    currentItem.AvgPrice = (itemWareHouse.Where(x => x.Stock > 0).Sum(x => x.Stock * x.AvgPrice)) / itemWareHouse.Where(x => x.Stock > 0).Sum(x => x.Stock);//Promedio ponderado
+                }
+                else
+                {
+
+                    currentItem.AvgPrice = item.AvgPrice;
+                }             
                 _context.SaveChanges();
             }       
         }

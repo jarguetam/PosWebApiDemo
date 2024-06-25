@@ -15,6 +15,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Entities
         public int WhsCode { get; set; }
         public int Type { get; set; }
         public int CreateBy { get; set; }
+        public DateTime CreateDate{ get; set; }
         public List<InventoryEntryDetail> Detail { get; set; }
         public InventoryEntry()
         {
@@ -45,6 +46,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Entities
                 builder.Property(x => x.Type).HasColumnName("Type");
                 builder.Property(x => x.Comment).HasColumnName("Comment");
                 builder.Property(x => x.CreateBy).HasColumnName("CreateBy");
+                builder.Property(x => x.CreateDate).HasColumnName("CreatedDate");
                 builder.HasMany(x => x.Detail).WithOne(x => x.InventoryEntry).HasForeignKey(x => x.EntryId);
                 builder.ToTable("InventoryEntry");
             }

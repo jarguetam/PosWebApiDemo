@@ -15,6 +15,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Entities
         public int Type { get; set; }
         public int WhsCode { get; set; }
         public int CreateBy { get; set; }
+        public DateTime CreatedDate { get; set; }
         public List<InventoryOutPutDetail> Detail { get; set; }
         public InventoryOutPut()
         {
@@ -46,6 +47,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Entities
                 builder.Property(x => x.Type).HasColumnName("Type");
                 builder.Property(x => x.Comment).HasColumnName("Comment");
                 builder.Property(x => x.CreateBy).HasColumnName("CreateBy");
+                builder.Property(x => x.CreatedDate).HasColumnName("CreatedDate");
                 builder.HasMany(x => x.Detail).WithOne(x => x.InventoryOutPut).HasForeignKey(x => x.OutputId);
                 builder.ToTable("InventoryOutPut");
             }

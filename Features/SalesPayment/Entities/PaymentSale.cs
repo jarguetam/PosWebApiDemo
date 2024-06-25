@@ -24,6 +24,7 @@ namespace Pos.WebApi.Features.SalesPayment.Entities
         public int CreateBy { get; set; }
         public bool Complete { get; set; }
         public int SellerId { get; set; }
+        public string Uuid { get; set; }
         public List<PaymentSaleDetail> Detail { get; set; }
         public PaymentSale()
         {
@@ -61,6 +62,7 @@ namespace Pos.WebApi.Features.SalesPayment.Entities
                 builder.Property(x => x.CreateBy).HasColumnName("CreateBy");
                 builder.Property(x => x.Complete).HasColumnName("Complete");
                 builder.Property(x => x.SellerId).HasColumnName("SellerId");
+                builder.Property(x => x.Uuid).HasColumnName("Uuid");
                 builder.HasMany(x => x.Detail).WithOne(x => x.PaymentSale).HasForeignKey(x => x.DocId);
                 builder.ToTable("PaymentSale");
             }
