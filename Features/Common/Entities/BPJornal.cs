@@ -16,6 +16,7 @@ namespace Pos.WebApi.Features.Common.Entities
         public int DocumentReferent { get; set; }
         public int CreateBy { get; set; }
         public DateTime CreateDate { get; set; }
+        public string UUID { get; set; }
 
         public bool IsValid()
         {
@@ -39,6 +40,7 @@ namespace Pos.WebApi.Features.Common.Entities
                 builder.Property(x => x.DocumentReferent).HasColumnName("DocumentReferent");
                 builder.Property(x => x.CreateBy).HasColumnName("CreateBy");
                 builder.Property(x => x.CreateDate).HasColumnName("CreateDate");
+                builder.Property(x => x.UUID).HasColumnName("UUID");
                 builder.ToTable("BPJournal");
             }
         }

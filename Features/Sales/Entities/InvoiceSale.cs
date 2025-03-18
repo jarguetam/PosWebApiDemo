@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using System;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Pos.WebApi.Features.Common.Entities;
+using Pos.WebApi.Features.Items.Entities;
+using Pos.WebApi.Features.Sellers.Entities;
+using Pos.WebApi.Features.Users.Entities;
+using System.Text.Json.Serialization;
 
 namespace Pos.WebApi.Features.Sales.Entities
 {
@@ -44,7 +49,16 @@ namespace Pos.WebApi.Features.Sales.Entities
         public decimal PaidToDate { get; set; }
         public decimal Balance { get; set; }
         public string Uuid { get; set; }
+        public bool Offline { get; set; }
         public List<InvoiceSaleDetail> Detail { get; set; }
+        [JsonIgnore]
+        public User User { get; set; }
+        [JsonIgnore]
+        public PayCondition PayCondition { get; set; }
+        [JsonIgnore]
+        public Seller Seller { get; set; }
+        [JsonIgnore]
+        public WareHouse WareHouse { get; set; }
         public InvoiceSale()
         {
             Detail = new List<InvoiceSaleDetail>();
@@ -106,7 +120,23 @@ namespace Pos.WebApi.Features.Sales.Entities
                 builder.Property(x => x.PaidToDate).HasColumnName("PaidToDate");
                 builder.Property(x => x.Balance).HasColumnName("Balance");
                 builder.Property(x => x.Uuid).HasColumnName("Uuid");
+                builder.Property(x => x.Offline).HasColumnName("Offline");
                 builder.HasMany(x => x.Detail).WithOne(x => x.InvoiceSale).HasForeignKey(x => x.DocId);
+                builder.HasOne(x => x.User)
+                 .WithMany()
+                 .HasForeignKey(x => x.CreateBy);
+
+                builder.HasOne(x => x.PayCondition)
+                      .WithMany()
+                      .HasForeignKey(x => x.PayConditionId);
+
+                builder.HasOne(x => x.Seller)
+                      .WithMany()
+                      .HasForeignKey(x => x.SellerId);
+
+                builder.HasOne(x => x.WareHouse)
+                      .WithMany()
+                      .HasForeignKey(x => x.WhsCode);
                 builder.ToTable("InvoiceSale");
             }
         }

@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Pos.WebApi.Features.Sales.Entities;
 using System;
 using System.Text.Json.Serialization;
 
@@ -21,6 +22,8 @@ namespace Pos.WebApi.Features.SalesPayment.Entities
         public decimal SumApplied { get; set; }
         [JsonIgnore]
         public PaymentSale PaymentSale { get; set; }
+        [JsonIgnore]
+        public InvoiceSale InvoiceSale { get; set; }
         public bool IsValid()
         {
             if ((this.InvoiceId) == 0) throw new System.Exception("Debe venir el numero de factura.");
@@ -45,6 +48,9 @@ namespace Pos.WebApi.Features.SalesPayment.Entities
                 builder.Property(x => x.LineTotal).HasColumnName("LineTotal");
                 builder.Property(x => x.SumApplied).HasColumnName("SumApplied");
                 builder.HasOne(x => x.PaymentSale).WithMany(x => x.Detail).HasForeignKey(x => x.DocId);
+                builder.HasOne(x => x.InvoiceSale)
+                      .WithMany()
+                      .HasForeignKey(x => x.InvoiceId);
                 builder.ToTable("PaymentSaleDetail");
             }
         }

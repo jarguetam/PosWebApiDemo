@@ -18,3 +18,8 @@
 .vs/Pos.WebApi/DesignTimeBuild/.dtbcache.v2
 *.jpg
 *.png
+/.vs
+*.json
+/.vs/DPos.WebApi/xs/project-cache
+*.xml
+.vs/DPos.WebApi/xs/project-cache/DPos.WebApi-Debug.json

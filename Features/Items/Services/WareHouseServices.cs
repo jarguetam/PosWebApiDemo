@@ -161,7 +161,7 @@ namespace Pos.WebApi.Features.Items.Services
                 var companyInfo = _context.CompanyInfo.FirstOrDefault();
                 var currentLine = _context.ItemWareHouse.Where(x => x.ItemId == request.ItemId && x.WhsCode == request.WhsCode).FirstOrDefault();
                 if (currentLine == null) throw new Exception("No existe este articulo en el almacen. Favor comuniquese con el administrador del sistema.");
-                if (request.Stock > 0)
+                if (request.Stock > 0 && request.AvgPrice!=0)
                 {
                     if (currentLine.Stock >= 0)
                     {
@@ -173,7 +173,7 @@ namespace Pos.WebApi.Features.Items.Services
                         currentLine.AvgPrice = request.AvgPrice;
                     }
                 }
-                currentLine.Stock = currentLine.Stock + request.Stock;
+                currentLine.Stock += request.Stock;
                 currentLine.DueDate = request.DueDate;
                 if (currentLine.Stock < 0 && !companyInfo.NegativeInventory) throw new Exception($"Inventario del producto {request.ItemId} recae en negativo. Revise su inventario.");
                 if (currentLine.AvgPrice < 0) throw new Exception($"Costo de producto en negativo. Revise su inventario.");

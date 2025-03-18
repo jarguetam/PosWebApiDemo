@@ -5,6 +5,12 @@ WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 
+# Agregar esta sección para instalar las dependencias necesarias
+RUN apt-get update && apt-get install -y \
+    libfontconfig1 \
+    libfreetype6 \
+    libgl1-mesa-dev
+
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src

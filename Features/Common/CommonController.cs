@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 using Pos.WebApi.Features.Customers.Entities;
+using System.Threading.Tasks;
 
 namespace Pos.WebApi.Features.Common
 {
@@ -333,6 +334,21 @@ namespace Pos.WebApi.Features.Common
             try
             {
                 var result = _bpJornalService.GetJournal(bpId, type);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        //[Authorize]
+        [HttpGet("GetCustomerJournal{bpId}/{from}/{to}")]
+        public async Task<IActionResult> GetCustomerJournalAsync(int bpId, DateTime from, DateTime to)
+        {
+            try
+            {
+                var result = await _bpJornalService.GetCustomerJournal(bpId, from, to);
                 return Ok(result);
             }
             catch (Exception ex)

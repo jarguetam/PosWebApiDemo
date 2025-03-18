@@ -1,4 +1,8 @@
-﻿using Org.BouncyCastle.Asn1.Ocsp;
+﻿using Dapper;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Org.BouncyCastle.Asn1.Ocsp;
 using Pos.WebApi.Features.Expenses.Dto;
 using Pos.WebApi.Features.Expenses.Entities;
 using Pos.WebApi.Features.Liquidations.Dto;
@@ -6,6 +10,7 @@ using Pos.WebApi.Features.Liquidations.Entities;
 using Pos.WebApi.Infraestructure;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 
 namespace Pos.WebApi.Features.Liquidations.Services
@@ -13,10 +18,12 @@ namespace Pos.WebApi.Features.Liquidations.Services
     public class LiquidationServices
     {
         private readonly PosDbContext _context;
+        private readonly IConfiguration _config;
 
-        public LiquidationServices(PosDbContext posDbContext)
+        public LiquidationServices(PosDbContext context, IConfiguration config)
         {
-            _context = posDbContext;
+            _context = context;
+            _config = config;
         }
 
         public List<LiquidationDto> GetLiquidationBase(Func<Liquidation, bool> condition)
@@ -44,6 +51,7 @@ namespace Pos.WebApi.Features.Liquidations.Services
                               CreatedByName = user.Name,
                               CreatedBy = e.CreatedBy,
                               Active = e.Active,
+                              Comment = e.Comment,
                               Detail = (from d in _context.LiquidationDetail                                       
                                         where d.LiquidationId == e.IdLiquidation
                                         select new LiquidationDetail
@@ -145,5 +153,116 @@ namespace Pos.WebApi.Features.Liquidations.Services
             return GetLiquidationByDate(request.CreatedDate, request.CreatedDate);
         }
 
+        public LiquidationSellerDto GetLiquidationSellerResums(int sellerId, DateTime date)
+        {
+            string connectionString = _config["connectionStrings:dbpos"];
+            using (var connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+                var parameters = new DynamicParameters();
+                parameters.Add("@VendedorId", sellerId, DbType.Int32);
+                parameters.Add("@FechaConsulta", date.Date, DbType.Date);
+                LiquidationSellerDto result = new LiquidationSellerDto();
+                result.Resum= connection.Query<LiquidationSellerResumDto>(
+                    "sp_ObtenerLiquidacionVendedorResumen",
+                    parameters,
+                    commandType: CommandType.StoredProcedure
+                ).AsList();
+
+                result.Detail = connection.Query<LiquidationSellerResumDetailDto>(
+                    "sp_ObtenerLiquidacionVendedorDetalle",
+                    parameters,
+                    commandType: CommandType.StoredProcedure
+                ).AsList();
+
+                return result;
+
+
+            }
+        }
+        //Money
+
+        public List<MoneyBill> GetMoneyBill()
+        {
+            return _context.MoneyBill.Where(x=> x.Activo).ToList();
+        }
+
+        public List<MoneyLiquidation> AddMoneyLiquidation(MoneyLiquidation request)
+        {
+            request.IsValid();
+            _context.Database.BeginTransaction();
+            try
+            {
+                request.Details.ForEach(x => x.LiquidationId = 0);
+                request.CreatedAt = DateTime.Now;
+ 
+                _context.MoneyLiquidation.Add(request);
+                _context.SaveChanges();
+                _context.Database.CommitTransaction();
+            }
+            catch (Exception ex)
+            {
+                _context.Database.RollbackTransaction();
+                throw new Exception(ex.Message);
+            }
+            return GetMoneyLiquidationByDate(request.ExpenseDate, request.ExpenseDate);
+        }
+
+        public MoneyLiquidation UpdateMoneyLiquidation(MoneyLiquidation request)
+        {
+            request.IsValid();
+            _context.Database.BeginTransaction();
+            try
+            {
+                var existingLiquidation = _context.MoneyLiquidation
+                    .Include(ml => ml.Details)
+                    .FirstOrDefault(ml => ml.LiquidationId == request.LiquidationId);
+
+                if (existingLiquidation == null)
+                {
+                    throw new Exception("Liquidación no encontrada");
+                }
+
+                // Actualizar propiedades principales
+                existingLiquidation.ExpenseDate = request.ExpenseDate;
+                existingLiquidation.Comment = request.Comment;
+                existingLiquidation.Total = request.Total;
+                existingLiquidation.Deposit = request.Deposit;
+                existingLiquidation.SellerId = request.SellerId;
+                existingLiquidation.UpdatedAt = DateTime.Now;
+ 
+
+                // Actualizar detalles
+                _context.MoneyLiquidationDetail.RemoveRange(existingLiquidation.Details);
+                existingLiquidation.Details = request.Details.Select(d => new MoneyLiquidationDetail
+                {
+                    LiquidationId = existingLiquidation.LiquidationId,
+                    MoneyId = d.MoneyId,
+                    Denominacion = d.Denominacion,
+                    Quantity = d.Quantity,
+                    Total = d.Total
+                }).ToList();
+
+                _context.SaveChanges();
+                _context.Database.CommitTransaction();
+
+                return existingLiquidation;
+            }
+            catch (Exception ex)
+            {
+                _context.Database.RollbackTransaction();
+                throw new Exception($"Error al actualizar la liquidación: {ex.Message}", ex);
+            }
+        }
+
+        public List<MoneyLiquidation> GetMoneyLiquidationByDate(DateTime from, DateTime to)
+        {
+            return _context.MoneyLiquidation
+                .Include(x=> x.Details)
+                .Include(x=> x.Seller)
+                .Where(x=> x.ExpenseDate.Date >= from.Date && x.ExpenseDate.Date<=to.Date)
+                .OrderByDescending(x=> x.LiquidationId)
+                .ToList();
+        }
     }
 }

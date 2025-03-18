@@ -12,7 +12,14 @@ using Pos.WebApi.Features.SalesPayment.Entities;
 using System.Collections.Generic;
 using System;
 using System.Linq;
-
+using Microsoft.Data.SqlClient;
+using System.Data;
+using Microsoft.Extensions.Configuration;
+using Dapper;
+using Org.BouncyCastle.Asn1.Ocsp;
+using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
+using System.Linq.Expressions;
 
 namespace Pos.WebApi.Features.Sales.Services
 {
@@ -25,8 +32,9 @@ namespace Pos.WebApi.Features.Sales.Services
         private readonly CustomerServices _priceService;
         private readonly BPJornalServices _bPJornalServices;
         private readonly CustomerServices _customerServices;
+        private readonly IConfiguration _config;
 
-        public SalesServices(PosDbContext posDbContext, ItemJournalServices journalServices, WareHouseServices wareHouseServices, ItemServices itemServices, CustomerServices priceService, BPJornalServices bPJornalServices, CustomerServices customerServices)
+        public SalesServices(PosDbContext posDbContext, ItemJournalServices journalServices, WareHouseServices wareHouseServices, ItemServices itemServices, CustomerServices priceService, BPJornalServices bPJornalServices, CustomerServices customerServices, IConfiguration config)
         {
             _context = posDbContext;
             _journalServices = journalServices;
@@ -35,6 +43,7 @@ namespace Pos.WebApi.Features.Sales.Services
             _priceService = priceService;
             _bPJornalServices = bPJornalServices;
             _customerServices = customerServices;
+            _config = config;
         }
 
         public List<OrderSaleDto> GetOrderSaleById(int id)
@@ -219,7 +228,14 @@ namespace Pos.WebApi.Features.Sales.Services
             _context.Database.BeginTransaction();
             try
             {
-                request.DocDate = DateTime.Now;
+                // Obtén la hora actual del servidor (Oregón)
+                DateTime serverTime = DateTime.Now;
+
+                // Define la zona horaria de Honduras
+                TimeZoneInfo hondurasTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central America Standard Time");
+                // Asigna la hora de Honduras a request.DocDate
+                request.DocDate = TimeZoneInfo.ConvertTime(serverTime, hondurasTimeZone);
+
                 request.DocQty = request.Detail.Sum(x => x.Quantity);
                 request.Complete = false;
                 request.Canceled = false;
@@ -256,31 +272,19 @@ namespace Pos.WebApi.Features.Sales.Services
                 currentOrder.DocTotal = request.DocTotal;
                 currentOrder.DocQty = request.DocQty;
                 currentOrder.Complete = request.Complete;
-                var currentDetail = _context.OrderSaleDetail.Where(x => x.DocId == currentOrder.DocId).ToList();
-                // var removeLine = request.Detail.Where(x => x.IsDelete == true).ToList();
-                ////Borramos las lineas
-                // _context.OrderSaleDetail.RemoveRange(removeLine);
-                var newLine = request.Detail.Where(x => x.DocDetailId == 0).ToList();
-                //Agregamos las nuevas lineas
-                _context.OrderSaleDetail.AddRange(newLine);
-                //Actualizamos las existente
-                currentDetail.ForEach((item) =>
-                {
-                    var itemToUpdate = request.Detail.Where(x => x.DocDetailId == item.DocDetailId && item.DocDetailId != 0).FirstOrDefault();
-                    if (itemToUpdate != null)
-                    {
-                        item.ItemId = itemToUpdate.ItemId;
-                        item.Quantity = itemToUpdate.Quantity;
-                        item.DueDate = itemToUpdate.DueDate;
-                        item.Price = itemToUpdate.Price;
-                        item.WhsCode = currentOrder.WhsCode;
-                        item.UnitOfMeasureId = itemToUpdate.UnitOfMeasureId;
-                        item.LineTotal = itemToUpdate.LineTotal;
-                        item.IsDelete = itemToUpdate.IsDelete;
-                    }
+                currentOrder.PayConditionId = request.PayConditionId;
+                // Borrar todas las líneas existentes
+                var existingLines = _context.OrderSaleDetail.Where(x => x.DocId == currentOrder.DocId);
+                _context.OrderSaleDetail.RemoveRange(existingLines);
 
-                });
-                _context.OrderSaleDetail.UpdateRange(currentDetail);
+                // Agregar todas las líneas como nuevas
+                foreach (var detail in request.Detail)
+                {
+                    detail.DocId = currentOrder.DocId;
+                    detail.DocDetailId = 0; 
+                    detail.WhsCode = currentOrder.WhsCode;
+                    _context.OrderSaleDetail.Add(detail);
+                }
                 _context.OrderSale.Update(currentOrder);
                 _context.SaveChanges();
                 _context.Database.CommitTransaction();
@@ -292,7 +296,6 @@ namespace Pos.WebApi.Features.Sales.Services
             }
             return GetOrderSaleById(request.DocId);
         }
-
         public List<OrderSaleDto> CanceledOrderSale(int docId)
         {
             var currentOrder = _context.OrderSale.Where(x => x.DocId == docId).FirstOrDefault();
@@ -313,7 +316,6 @@ namespace Pos.WebApi.Features.Sales.Services
             }
             return GetOrderSaleById(docId);
         }
-
         public List<OrderSaleDto> CompleteOrderSale(int docId, bool status)
         {
             var currentOrder = _context.OrderSale.Where(x => x.DocId == docId).FirstOrDefault();
@@ -343,14 +345,64 @@ namespace Pos.WebApi.Features.Sales.Services
         }
         public List<InvoiceSaleDto> GetInvoiceSaleActiveCustomer(int idCustomer)
         {
-            var result = GetBaseInvoice(x => x.Complete == false && x.CustomerId == idCustomer).ToList();
-            return result;
-        }
+            string conec = _config["connectionStrings:dbpos"];
+            using (var connection = new SqlConnection(conec))
+            {
+                connection.Open();
+                var result = connection.Query<InvoiceSaleDto>(
+                    "GetInvoiceSaleActiveCustomer",
+                    new { CustomerId = idCustomer },
+                    commandType: CommandType.StoredProcedure
+                );
 
+                // Fetch details for each invoice
+                foreach (var invoice in result)
+                {
+                    invoice.DetailDto = connection.Query<InvoiceSaleDetailDto>(
+                        "SELECT d.DocDetailId, d.DocId, item.ItemId, item.ItemCode, item.ItemName, " +
+                        "d.Quantity, d.DueDate, d.Price, d.Cost, w.WhsCode, w.WhsName, " +
+                        "d.UnitOfMeasureId, uom.UnitOfMeasureName, d.LineTotal " +
+                        "FROM InvoiceSaleDetail d " +
+                        "JOIN Item item ON d.ItemId = item.ItemId " +
+                        "JOIN WareHouse w ON d.WhsCode = w.WhsCode " +
+                        "JOIN UnitOfMeasure uom ON d.UnitOfMeasureId = uom.UnitOfMeasureId " +
+                        "WHERE d.DocId = @DocId AND d.IsDelete = 0",
+                        new { DocId = invoice.DocId }
+                    ).ToList();
+                }
+                
+                return result.ToList();
+            }
+        }
         public List<InvoiceSaleDto> GetInvoiceSaleActiveSeller(int idSeller)
         {
-            var result = GetBaseInvoice(x => x.Complete == false && x.SellerId == idSeller).ToList();
-            return result;
+            string conec = _config["connectionStrings:dbpos"];
+            using (var connection = new SqlConnection(conec))
+            {
+                connection.Open();
+                var result = connection.Query<InvoiceSaleDto>(
+                "GetInvoiceSaleActive",
+                    commandType: CommandType.StoredProcedure
+                );
+
+                //// Fetch details for each invoice
+                //foreach (var invoice in result)
+                //{
+                //    invoice.DetailDto = connection.Query<InvoiceSaleDetailDto>(
+                //        "SELECT d.DocDetailId, d.DocId, item.ItemId, item.ItemCode, item.ItemName, " +
+                //        "d.Quantity, d.DueDate, d.Price, d.Cost, w.WhsCode, w.WhsName, " +
+                //        "d.UnitOfMeasureId, uom.UnitOfMeasureName, d.LineTotal " +
+                //        "FROM InvoiceSaleDetail d " +
+                //        "JOIN Item item ON d.ItemId = item.ItemId " +
+                //        "JOIN WareHouse w ON d.WhsCode = w.WhsCode " +
+                //        "JOIN UnitOfMeasure uom ON d.UnitOfMeasureId = uom.UnitOfMeasureId " +
+                //        "WHERE d.DocId = @DocId AND d.IsDelete = 0",
+                //        new { DocId = invoice.DocId }
+                //    ).ToList();
+                //}
+
+                return result.ToList();
+            }
         }
         public List<InvoiceSaleDto> GetInvoiceSaleByDate(DateTime From, DateTime To)
         {
@@ -444,98 +496,84 @@ namespace Pos.WebApi.Features.Sales.Services
                           }).ToList();
             return result.OrderByDescending(x => x.DocId).ToList();    
         }
-        private List<InvoiceSaleDto> GetBaseInvoice(Func<InvoiceSale, bool> condition)
+        private List<InvoiceSaleDto> GetBaseInvoice(Expression<Func<InvoiceSale, bool>> condition)
         {
-            var invoice = _context.InvoiceSale.Where(condition).ToList();
-            var userId = invoice.Select(x => x.CreateBy).Distinct().ToList();
-            var user = _context.User.Where(x => userId.Contains(x.UserId)).ToList();
-            var whsCode = invoice.Select(x => x.WhsCode).Distinct().ToList();
-            var whs = _context.WareHouse.Where(x => whsCode.Contains(x.WhsCode)).ToList();
-            var invoiceId = invoice.Select(x => x.DocId).Distinct().ToList();
-            var invoiceDetail = _context.InvoiceSaleDetail.Where(x => invoiceId.Contains(x.DocId)).ToList();
-            var itemId = invoiceDetail.Select(x => x.ItemId).Distinct().ToList();
-            var items = _context.Item.Where(x => itemId.Contains(x.ItemId)).ToList();
-            var unit = invoiceDetail.Select(x => x.UnitOfMeasureId).Distinct().ToList();
-            var units = _context.UnitOfMeasure.Where(x => unit.Contains(x.UnitOfMeasureId)).ToList();
-            var payId = invoice.Select(x => x.PayConditionId).Distinct().ToList();
-            var pays = _context.PayCondition.Where(x => payId.Contains(x.PayConditionId)).ToList();
-            var sellerId = invoice.Select(x => x.SellerId).Distinct().ToList();
-            var sellers = _context.Seller.Where(x => sellerId.Contains(x.SellerId)).ToList();
-
-            var edetail = (from d in invoiceDetail
-                           join i in items on d.ItemId equals i.ItemId
-                           join w in whs on d.WhsCode equals w.WhsCode
-                           join u in units on d.UnitOfMeasureId equals u.UnitOfMeasureId
-                           where d.IsDelete == false
-                           select new InvoiceSaleDetailDto
-                           {
-                               DocDetailId = d.DocDetailId,
-                               DocId = d.DocId,
-                               ItemId = i.ItemId,
-                               ItemCode = i.ItemCode,
-                               ItemName = i.ItemName,
-                               Quantity = d.Quantity,
-                               DueDate = d.DueDate,
-                               Price = d.Price,
-                               Cost = d.Cost,
-                               WhsCode = w.WhsCode,
-                               WhsName = w.WhsName,
-                               UnitOfMeasureId = d.UnitOfMeasureId,
-                               UnitOfMeasureName = u.UnitOfMeasureName,
-                               LineTotal = d.LineTotal,                          
-                           }).ToList();
-
-            var result = (from e in invoice
-                          join d in edetail on e.DocId equals d.DocId into detail
-                          join w in whs on e.WhsCode equals w.WhsCode
-                          join u in user on e.CreateBy equals u.UserId
-                          join p in pays on e.PayConditionId equals p.PayConditionId
-                          join s in sellers on e.SellerId equals s.SellerId
-                          select new InvoiceSaleDto
-                          {
-                              DocId = e.DocId,
-                              CustomerId = e.CustomerId,
-                              CustomerCode = e.CustomerCode,
-                              CustomerName = e.CustomerName,
-                              CustomerAddress = e.CustomerAddress,
-                              CustomerRTN = e.CustomerRTN,
-                              PayConditionId = e.PayConditionId,
-                              PayConditionName = p.PayConditionName,
-                              DocDate = e.DocDate,
-                              DueDate = e.DueDate,
-                              Canceled = e.Canceled,
-                              Comment = e.Comment,
-                              Reference = e.Reference,
-                              WhsCode = e.WhsCode,
-                              WhsName = w.WhsName,
-                              SubTotal = e.SubTotal,
-                              Tax = e.Tax,
-                              Disccounts = e.Disccounts,
-                              DiscountsTotal = e.DiscountsTotal,
-                              DocTotal = e.DocTotal,
-                              DocQty = detail.Sum(x => x.Quantity),
-                              CreateBy = e.CreateBy,
-                              CreateByName = u.Name,
-                              Complete = e.Complete,
-                              DetailDto = detail.ToList(),
-                              TaxCustomer = e.Tax > 0 ? true : false,
-                              SellerId = s.SellerId,
-                              SellerName = s.SellerName,
-                              PriceListId = e.PriceListId,
-                              InvoiceFiscalNo = e.InvoiceFiscalNo,
-                              Establishment = e.Establishment,
-                              Point = e.Point,
-                              Type = e.Type,
-                              Cai = e.Cai,
-                              LimitIssue = e.LimitIssue,
-                              AuthorizedRangeFrom = e.AuthorizedRangeFrom,
-                              AuthorizedRangeTo = e.AuthorizedRangeTo,
-                              CorrelativeId = e.CorrelativeId,
-                              Balance = e.Balance,
-                              PaidToDate = e.PaidToDate,
-                              Uuid = e.Uuid
-                          }).ToList();
-            return result.OrderByDescending(x => x.DocDate).ToList();
+            return _context.InvoiceSale
+                .Include(x => x.Detail)
+                    .ThenInclude(x => x.Items)
+                .Include(x => x.Detail)
+                    .ThenInclude(x => x.WareHouse)
+                .Include(x => x.Detail)
+                    .ThenInclude(x => x.UnitOfMeasure)
+                .Include(x => x.WareHouse)
+                .Include(x => x.User)
+                .Include(x => x.PayCondition)
+                .Include(x => x.Seller)
+                .Where(condition)
+                .Where(x => x.Detail.Any(d => !d.IsDelete))
+                .AsNoTracking()
+                .Select(e => new InvoiceSaleDto
+                {
+                    DocId = e.DocId,
+                    CustomerId = e.CustomerId,
+                    CustomerCode = e.CustomerCode,
+                    CustomerName = e.CustomerName,
+                    CustomerAddress = e.CustomerAddress,
+                    CustomerRTN = e.CustomerRTN,
+                    PayConditionId = e.PayConditionId,
+                    PayConditionName = e.PayCondition.PayConditionName,
+                    DocDate = e.DocDate,
+                    DueDate = e.DueDate,
+                    Canceled = e.Canceled,
+                    Comment = e.Comment,
+                    Reference = e.Reference,
+                    WhsCode = e.WhsCode,
+                    WhsName = e.WareHouse.WhsName,
+                    SubTotal = e.SubTotal,
+                    Tax = e.Tax,
+                    Disccounts = e.Disccounts,
+                    DiscountsTotal = e.DiscountsTotal,
+                    DocTotal = e.DocTotal,
+                    DocQty = e.Detail.Where(d => !d.IsDelete).Sum(x => x.Quantity),
+                    CreateBy = e.CreateBy,
+                    CreateByName = e.User.Name,
+                    Complete = e.Complete,
+                    DetailDto = e.Detail.Where(d => !d.IsDelete).Select(d => new InvoiceSaleDetailDto
+                    {
+                        DocDetailId = d.DocDetailId,
+                        DocId = d.DocId,
+                        ItemId = d.Items.ItemId,
+                        ItemCode = d.Items.ItemCode,
+                        ItemName = d.Items.ItemName,
+                        Quantity = d.Quantity,
+                        DueDate = d.DueDate,
+                        Price = d.Price,
+                        Cost = d.Cost,
+                        WhsCode = d.WareHouse.WhsCode,
+                        WhsName = d.WareHouse.WhsName,
+                        UnitOfMeasureId = d.UnitOfMeasureId,
+                        UnitOfMeasureName = d.UnitOfMeasure.UnitOfMeasureName,
+                        LineTotal = d.LineTotal
+                    }).ToList(),
+                    TaxCustomer = e.Tax > 0,
+                    SellerId = e.Seller.SellerId,
+                    SellerName = e.Seller.SellerName,
+                    PriceListId = e.PriceListId,
+                    InvoiceFiscalNo = e.InvoiceFiscalNo,
+                    Establishment = e.Establishment,
+                    Point = e.Point,
+                    Type = e.Type,
+                    Cai = e.Cai,
+                    LimitIssue = e.LimitIssue,
+                    AuthorizedRangeFrom = e.AuthorizedRangeFrom,
+                    AuthorizedRangeTo = e.AuthorizedRangeTo,
+                    CorrelativeId = e.CorrelativeId,
+                    Balance = e.Balance,
+                    PaidToDate = e.PaidToDate,
+                    Uuid = e.Uuid
+                })
+                .OrderByDescending(x => x.DocDate)
+                .ToList();
         }
         public List<InvoiceSaleDto> GetInvoiceSale()
         {
@@ -633,7 +671,7 @@ namespace Pos.WebApi.Features.Sales.Services
             request.DocTotal = request.SubTotal + request.Tax - request.DiscountsTotal;
             request.IsValid();
             var uuid = _context.InvoiceSale.Where(x => x.Uuid == request.Uuid).FirstOrDefault();
-            if (uuid != null) throw new Exception("Esta factura ya existe en la base de datos. UUID");
+            if (uuid != null) throw new Exception("Error: Esta factura ya existe en la base de datos. UUID");
             _context.Database.BeginTransaction();
             try
             {
@@ -665,8 +703,16 @@ namespace Pos.WebApi.Features.Sales.Services
                 request.LimitIssue = correlative.DateLimit.Date;
                 request.AuthorizedRangeFrom = correlative.AuthorizeRangeFrom.ToString().PadLeft(8, ' ').Replace(' ', '0');
                 request.AuthorizedRangeTo = correlative.AuthorizeRangeTo.ToString().PadLeft(8, ' ').Replace(' ', '0');
-                request.Cai = correlative.Cai;               
-                request.DocDate = request.DocDate != fechaPorDefecto? request.DocDate: DateTime.Now;
+                request.Cai = correlative.Cai;
+                // Obtén la hora actual del servidor (Oregón)
+                DateTime serverTime = DateTime.Now;
+
+                // Define la zona horaria de Honduras
+                TimeZoneInfo hondurasTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central America Standard Time");
+                // Asigna la hora de Honduras a request.DocDat
+                request.DocDate = request.DocDate != fechaPorDefecto? request.DocDate: TimeZoneInfo.ConvertTime(serverTime, hondurasTimeZone);
+                if (request.Offline)
+                    request.DocDate = TimeZoneInfo.ConvertTime(serverTime, hondurasTimeZone);
                 request.DocQty = request.Detail.Sum(x => x.Quantity);
                 request.Complete = false;
                 request.Canceled = false;
@@ -715,7 +761,8 @@ namespace Pos.WebApi.Features.Sales.Services
                     Documents = "Factura de venta",
                     DocumentReferent = request.DocId,
                     CreateBy = request.CreateBy,
-                    CreateDate = request.DocDate
+                    CreateDate = request.DocDate,
+                    UUID = request.Uuid,
                 };
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _customerServices.UpdateBalanceCustomer(request.CustomerId, request.DocTotal);
@@ -821,11 +868,11 @@ namespace Pos.WebApi.Features.Sales.Services
             var currentInvoice = _context.InvoiceSale.Where(x => x.DocId == docId).FirstOrDefault();
             var currentDetail = _context.InvoiceSaleDetail.Where(x => x.DocId == docId).ToList();
             if (currentInvoice == null) throw new Exception("No existe esta orden, comuniquese con el administrador del sistema.");
-            var liquidation = _context.LiquidationDetail.Where(x => x.DocNum == docId && x.DocType.Contains("Facturas")).FirstOrDefault();
+            var liquidation = _context.LiquidationDetail.Where(x => x.DocNum == docId && x.DocType.Contains("Factura")).FirstOrDefault();
             if (liquidation != null)
             {
                 var liquitationStatus = _context.Liquidation.Where(x => x.IdLiquidation == liquidation.LiquidationId).FirstOrDefault();
-                if (liquitationStatus.Active == true) throw new Exception("No puede cancelar esta factura, porque ya esta liquidada. Anule primero la liquidacion.");
+                if (liquitationStatus.Active) throw new Exception("No puede cancelar esta factura, porque ya esta liquidada. Anule primero la liquidacion.");
             }          
             if(currentInvoice.PaidToDate>0) throw new Exception("No puede cancelar esta factura, ya que tiene un pago aplicado. Anule el pago primero.");
             _context.Database.BeginTransaction();
@@ -871,10 +918,11 @@ namespace Pos.WebApi.Features.Sales.Services
                     DocId = currentInvoice.DocId,
                     BpType = "C",
                     TransValue = currentInvoice.DocTotal * -1,
-                    Documents = "Factura de Venta - Anulacion",
+                    Documents = "Factura de Venta - Anulación",
                     DocumentReferent = currentInvoice.DocId,
                     CreateBy = currentInvoice.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = DateTime.Now,
+                    UUID = currentInvoice.Uuid+"AnulaciónFactura",
                 };
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _customerServices.UpdateBalanceCustomer(currentInvoice.CustomerId, currentInvoice.DocTotal * -1);
@@ -911,6 +959,56 @@ namespace Pos.WebApi.Features.Sales.Services
             }
             return GetInvoiceSaleById(docId);
         }
+
+        public async Task<List<InvoiceSaleDto>> CompleteInvoiceSaleAsync(int docId, decimal sumApplied)
+        {
+            var currentInvoice = await _context.InvoiceSale
+                .FirstOrDefaultAsync(x => x.DocId == docId);
+
+            if (currentInvoice == null)
+                throw new Exception("No existe esta orden, comuníquese con el administrador del sistema.");
+
+            try
+            {
+                currentInvoice.PaidToDate += sumApplied;
+                currentInvoice.Balance -= sumApplied;
+                currentInvoice.Complete = currentInvoice.Balance <= 0;
+
+                _context.InvoiceSale.Update(currentInvoice);
+                await _context.SaveChangesAsync();
+
+                return Task.FromResult(GetInvoiceSaleById(docId)).Result;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public List<InvoiceSaleDto> CompleteInvoiceSaleFromPayment(int docId, decimal sumApplied, bool isOffline, string uuid)
+        {
+            var currentInvoice = _context.InvoiceSale
+                .FirstOrDefault(x => isOffline ? x.Uuid == uuid : x.DocId == docId);
+
+            if (currentInvoice == null)
+                throw new Exception("No se ha sincronizado la factura, intente sincronizar el pago manualmente, despues que sincronice la factura.");
+
+            try
+            {
+                currentInvoice.PaidToDate += sumApplied;
+                currentInvoice.Balance -= sumApplied;
+                currentInvoice.Complete = currentInvoice.Balance <= 0;
+
+                _context.InvoiceSale.Update(currentInvoice);
+                _context.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error al actualizar la factura: {ex.Message}", ex);
+            }
+
+            return GetInvoiceSaleById(docId);
+        }
         public List<CustomerAccountDto> GetCustomerAccountBalance()
         {
             var currentDate = DateTime.Now.Date;
@@ -921,22 +1019,32 @@ namespace Pos.WebApi.Features.Sales.Services
             var sellers = _context.Seller.Where(x => sellerId.Contains(x.SellerId)).ToList();
             var payId = sale.Select(x => x.PayConditionId).Distinct().ToList();
             var paycondition = _context.PayCondition.Where(x => payId.Contains(x.PayConditionId)).ToList();
-
+            var customerFrecuency = _context.CustomerFrequency.ToList();
             var response = (from p in sale
                             join s in sellers on p.SellerId equals s.SellerId
                             join c in customer on p.CustomerId equals c.CustomerId
                             join pay in paycondition on p.PayConditionId equals pay.PayConditionId
+                            join f in customerFrecuency on c.FrequencyId equals f.Id
                             orderby p.CustomerId
                             select new CustomerAccountDto
                             {
                                 CustomerId = p.CustomerId,
                                 CustomerCode = p.CustomerCode,
                                 CustomerName = p.CustomerName,
+                                Frecuency = f.FrequencyName,
                                 SellerName = s.SellerName,
                                 SellerId = s.SellerId,
                                 PayConditionName = pay.PayConditionName,
+                                PayConditionId = pay.PayConditionId,
+                                Uuid = p.Uuid,
+                                SubTotal =p.SubTotal,
+                                Tax = p.Tax,
+                                DocDate = p.DocDate,
+                                DiscountsTotal = p.DiscountsTotal,
                                 InvoiceNumber = p.DocId,
-                                Balance = c.Balance,
+                                DocTotal = p.DocTotal,
+                                PaidToDate = p.PaidToDate,
+                                Balance = p.Balance,
                                 DueDate = p.DueDate,
                                 UnexpiredBalance = p.DueDate > currentDate ? p.Balance : 0,
                                 BalanceDue = p.DueDate < currentDate ? p.Balance : 0,
@@ -946,7 +1054,7 @@ namespace Pos.WebApi.Features.Sales.Services
                                 BalanceFrom91To120Days = (p.DueDate >= currentDate.AddDays(-120) && p.DueDate < currentDate.AddDays(-91)) ? p.Balance : 0,
                                 BalanceMoreThan120Days = (p.DueDate < currentDate.AddDays(-121)) ? p.Balance : 0,
                                 DaysExpired = ((p.DueDate.Date - currentDate.Date).Days) * -1 < 0 ? 0 : ((p.DueDate.Date - currentDate.Date).Days) * -1
-                            }).ToList();
+                            }).OrderByDescending(x=> x.DaysExpired).ToList();
             return response;
         }
         public void AddPaymentSaleCounted(PaymentSale request)
@@ -969,7 +1077,8 @@ namespace Pos.WebApi.Features.Sales.Services
                     Documents = "Pago de factura de Venta",
                     DocumentReferent = request.DocId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = DateTime.Now,
+                    UUID = request.Uuid+"Contado",
                 };
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _customerServices.UpdateBalanceCustomer(request.CustomerId, request.DocTotal * -1);

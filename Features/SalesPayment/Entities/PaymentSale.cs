@@ -2,6 +2,9 @@
 using System.Collections.Generic;
 using System;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using Pos.WebApi.Features.Common.Entities;
+using Pos.WebApi.Features.Users.Entities;
 
 namespace Pos.WebApi.Features.SalesPayment.Entities
 {
@@ -25,7 +28,11 @@ namespace Pos.WebApi.Features.SalesPayment.Entities
         public bool Complete { get; set; }
         public int SellerId { get; set; }
         public string Uuid { get; set; }
+        public bool Offline { get; set; }
         public List<PaymentSaleDetail> Detail { get; set; }
+
+        public User User { get; set; }
+        public PayCondition PayCondition { get; set; }
         public PaymentSale()
         {
             Detail = new List<PaymentSaleDetail>();
@@ -63,7 +70,16 @@ namespace Pos.WebApi.Features.SalesPayment.Entities
                 builder.Property(x => x.Complete).HasColumnName("Complete");
                 builder.Property(x => x.SellerId).HasColumnName("SellerId");
                 builder.Property(x => x.Uuid).HasColumnName("Uuid");
+                builder.Property(x => x.Offline).HasColumnName("Offline");
                 builder.HasMany(x => x.Detail).WithOne(x => x.PaymentSale).HasForeignKey(x => x.DocId);
+       
+                builder.HasOne(x => x.User)
+                      .WithMany()
+                      .HasForeignKey(x => x.CreateBy);
+
+                builder.HasOne(x => x.PayCondition)
+                      .WithMany()
+                      .HasForeignKey(x => x.PayConditionId);
                 builder.ToTable("PaymentSale");
             }
         }

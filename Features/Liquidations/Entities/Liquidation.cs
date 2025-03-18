@@ -24,6 +24,7 @@ namespace Pos.WebApi.Features.Liquidations.Entities
         public DateTime CreatedDate { get; set; }
         public int CreatedBy { get; set; }
         public bool Active { get; set; }
+        public string Comment { get; set; }
         public List<LiquidationDetail> Detail { get; set; }
         public Liquidation()
         {
@@ -61,6 +62,7 @@ namespace Pos.WebApi.Features.Liquidations.Entities
                 builder.Property(x => x.CreatedDate).HasColumnName("CreatedDate");
                 builder.Property(x => x.CreatedBy).HasColumnName("CreatedBy");
                 builder.Property(x => x.Active).HasColumnName("Active");
+                builder.Property(x => x.Comment).HasColumnName("Comment");
                 builder.HasMany(x => x.Detail).WithOne(x => x.Liquidation).HasForeignKey(x => x.LiquidationId);
                 builder.ToTable("Liquidation");
             }

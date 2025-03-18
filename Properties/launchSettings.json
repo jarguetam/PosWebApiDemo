@@ -13,9 +13,9 @@
       "launchBrowser": true,
       "launchUrl": "swagger",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Production"
+        "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:5001;http://localhost:5000"
+      "applicationUrl": "https://localhost:3001;http://localhost:3001"
     },
     "WSL": {
       "commandName": "WSL2",
@@ -42,7 +42,7 @@
     "windowsAuthentication": false,
     "anonymousAuthentication": true,
     "iisExpress": {
-      "applicationUrl": "http://localhost:50209",
+      "applicationUrl": "http://localhost:3001",
       "sslPort": 0
     }
   }

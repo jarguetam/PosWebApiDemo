@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+
 
 namespace Pos.WebApi.Features.InventoryTransactions.Entities
 {

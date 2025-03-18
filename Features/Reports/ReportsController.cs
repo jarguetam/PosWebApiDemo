@@ -1,8 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Pos.WebApi.Features.Dashboard.Dto;
-using Pos.WebApi.Features.Dashboard;
-using System.Collections.Generic;
+﻿using Microsoft.AspNetCore.Mvc;
 using System;
 using Pos.WebApi.Features.Reports.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -57,10 +53,31 @@ namespace Pos.WebApi.Features.Reports
             return new FileStreamResult(ms, "application/pdf");            
         }
 
-        [HttpGet("GetCXCReport{idseller}")]
-        public IActionResult GetCXCReport(int idseller)
+        [HttpGet("GetCXCReport{idseller}/{onlyOverdue}")]
+        public IActionResult GetCXCReport(int idseller, bool onlyOverdue)
         {
-            var ms = _service.GenerateReportCxc(idseller);
+            var ms = _service.GenerateReportCxc(idseller, onlyOverdue);
+            return new FileStreamResult(ms, "application/pdf");
+        }
+
+        [HttpGet("GetReportInventoryCategory{whsCode}")]
+        public IActionResult GetReportInventoryCategory(int whsCode)
+        {
+            var ms = _service.GenerateReportInventoryPdf(whsCode);
+            return new FileStreamResult(ms, "application/pdf");
+        }
+
+        [HttpGet("GetReportMargen{from}/{to}/{sellerId}")]
+        public IActionResult GetReportorMargen(DateTime from, DateTime to, int sellerId)
+        {
+            var ms = _service.GenerateReporteSalesMargen(from, to, sellerId);
+            return new FileStreamResult(ms, "application/pdf");
+        }
+
+        [HttpGet("GetReportExpense{from}/{to}/{sellerId}")]
+        public IActionResult GetReportExpense(DateTime from, DateTime to, int sellerId)
+        {
+            var ms = _service.GenerateReportExpense(from, to, sellerId);
             return new FileStreamResult(ms, "application/pdf");
         }
 

@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Pos.WebApi.Features.Items.Entities;
 using System;
 using System.Text.Json.Serialization;
 
@@ -21,6 +22,12 @@ namespace Pos.WebApi.Features.Sales.Entities
         public decimal Weight { get; set; }
         [JsonIgnore]
         public InvoiceSale InvoiceSale { get; set; }
+        [JsonIgnore]
+        public Item Items { get; set; }
+        [JsonIgnore]
+        public WareHouse WareHouse { get; set; }
+        [JsonIgnore]
+        public UnitOfMeasure UnitOfMeasure { get; set; }
         public bool IsValid()
         {
             if ((this.WhsCode) == 0) throw new System.Exception("Debe venir el almacen.");
@@ -48,6 +55,15 @@ namespace Pos.WebApi.Features.Sales.Entities
                 builder.Property(x => x.IsDelete).HasColumnName("IsDelete");
                 builder.Property(x => x.Weight).HasColumnName("Weight");
                 builder.HasOne(x => x.InvoiceSale).WithMany(x => x.Detail).HasForeignKey(x => x.DocId);
+                builder.HasOne(x => x.Items)
+                      .WithMany()
+                      .HasForeignKey(x => x.ItemId);
+                builder.HasOne(x => x.WareHouse)
+                      .WithMany()
+                      .HasForeignKey(x => x.WhsCode);
+                builder.HasOne(x => x.UnitOfMeasure)
+                      .WithMany()
+                      .HasForeignKey(x => x.UnitOfMeasureId);
                 builder.ToTable("InvoiceSaleDetail");
             }
         }

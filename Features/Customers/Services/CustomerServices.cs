@@ -6,21 +6,23 @@ using Pos.WebApi.Features.Customers.Dto;
 using Pos.WebApi.Features.Customers.Entities;
 using Pos.WebApi.Features.Items.Dto;
 using Pos.WebApi.Features.Items.Entities;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Data.SqlClient;
-using System.Text;
-using System.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Dapper;
+using Microsoft.Extensions.Configuration;
+using System.Threading.Tasks;
 
 namespace Pos.WebApi.Features.Customers.Services
 {
     public class CustomerServices
     {
         private readonly PosDbContext _context;
+        private readonly IConfiguration _config;
 
-        public CustomerServices(PosDbContext context)
+        public CustomerServices(PosDbContext context, IConfiguration config)
         {
             _context = context;
+            _config = config;
         }
         //Category
         public List<CustomerCategoryDto> GetCustomerCategory()
@@ -439,69 +441,58 @@ namespace Pos.WebApi.Features.Customers.Services
         }
         public List<CustomerDto> GetCustomerActive()
         {
-            var customer = _context.Customer.Where(x => x.Active == true).ToList();
-            var userId = customer.Select(x => x.CreateBy).Distinct().ToList();
-            var user = _context.User.Where(x => userId.Contains(x.UserId)).ToList();
-            var sellerId = customer.Select(x => x.SellerId).Distinct().ToList();
-            var seller = _context.Seller.Where(x => sellerId.Contains(x.SellerId)).ToList();
-            var categoryId = customer.Select(x => x.CustomerCategoryId).Distinct().ToList();
-            var category = _context.CustomerCategory.Where(x => categoryId.Contains(x.CustomerCategoryId)).ToList();
-            var payId = customer.Select(x => x.PayConditionId).Distinct().ToList();
-            var pay = _context.PayCondition.Where(x => payId.Contains(x.PayConditionId)).ToList();
-            var priceListId = customer.Select(x => x.ListPriceId).Distinct().ToList();
-            var priceList = _context.PriceList.Where(x => priceListId.Contains(x.ListPriceId)).ToList();
-            var zoneId = customer.Select(x => x.ZoneId).Distinct().ToList();
-            var zone = _context.CustomerZone.Where(x => zoneId.Contains(x.Id)).ToList();
-            var frequencyId = customer.Select(x => x.FrequencyId).Distinct().ToList();
-            var frequency = _context.CustomerFrequency.Where(x => frequencyId.Contains(x.Id)).ToList();
-            var sellerRegionId = seller.Select(x => x.RegionId).Distinct().ToList();
-           // var region = _context.SellerRegion.Where(x => sellerRegionId.Contains(x.RegionId)).ToList();
-            var result = (from c in customer
-                          join s in seller on c.SellerId equals s.SellerId
-                          join ca in category on c.CustomerCategoryId equals ca.CustomerCategoryId
-                          join p in pay on c.PayConditionId equals p.PayConditionId
-                          join pl in priceList on c.ListPriceId equals pl.ListPriceId
-                          join u in user on c.CreateBy equals u.UserId
-                          join z in zone on c.ZoneId equals z.Id
-                          join f in frequency on c.FrequencyId equals f.Id
+            string conec = _config["connectionStrings:dbpos"];
+            using (var connection = new SqlConnection(conec))
+            {
+                connection.Open();
 
-                          select new CustomerDto
-                          {
-                              CustomerId = c.CustomerId,
-                              CustomerCode = c.CustomerCode,
-                              CustomerName = c.CustomerName,
-                              Rtn = c.Rtn,
-                              Phone = c.Phone,
-                              Email = c.Email,
-                              Address = c.Address,
-                              SellerId = c.SellerId,
-                              SellerName = s.SellerName,
-                              CustomerCategoryId = c.CustomerCategoryId,
-                              CategoryName = ca.CustomerCategoryName,
-                              PayConditionId = c.PayConditionId,
-                              PayConditionName = p.PayConditionName,
-                              PayConditionDays = p.PayConditionDays,
-                              ListPriceId = c.ListPriceId,
-                              PriceListName = pl.ListPriceName,
-                              Balance = c.Balance,
-                              CreditLine = c.CreditLine,
-                              Tax = c.Tax,
-                              CreateBy = c.CreateBy,
-                              CreateByName = u.Name,
-                              CreateDate = c.CreateDate,
-                              Active = c.Active,
-                              LimitInvoiceCredit = c.LimitInvoiceCredit,
-                              TotalInvoiceCredit = c.TotalInvoiceCredit,
-                              Purchase = c.Purchase,
-                              FrequencyId = c.FrequencyId,
-                              ZoneId = c.ZoneId,
-                              RegionId = c.RegionId,
-                              FrequencyName = f.FrequencyName,
-                              ZoneName = z.ZoneName,
-                             
-                          }).ToList();
-            return result;
-
+                var query = @"
+                SELECT 
+                    c.CustomerId,
+                    c.CustomerCode,
+                    c.CustomerName,
+                    c.Rtn,
+                    c.Phone,
+                    c.Email,
+                    c.Address,
+                    c.SellerId,
+                    s.SellerName,
+                    c.CustomerCategoryId,
+                    ca.CustomerCategoryName AS CategoryName,
+                    c.PayConditionId,
+                    p.PayConditionName,
+                    p.PayConditionDays,
+                    c.ListPriceId,
+                    pl.ListPriceName AS PriceListName,
+                    c.Balance,
+                    c.CreditLine,
+                    c.Tax,
+                    c.CreateBy,
+                    u.Name AS CreateByName,
+                    c.CreateDate,
+                    c.Active,
+                    c.LimitInvoiceCredit,
+                    c.TotalInvoiceCredit,
+                    c.Purchase,
+                    c.FrequencyId,
+                    c.ZoneId,
+                    c.RegionId,
+                    f.FrequencyName,
+                    z.ZoneName
+                FROM 
+                    Customer c
+                INNER JOIN Seller s ON c.SellerId = s.SellerId
+                INNER JOIN CustomerCategory ca ON c.CustomerCategoryId = ca.CustomerCategoryId
+                INNER JOIN PayCondition p ON c.PayConditionId = p.PayConditionId
+                INNER JOIN PriceList pl ON c.ListPriceId = pl.ListPriceId
+                INNER JOIN [User] u ON c.CreateBy = u.UserId
+                INNER JOIN CustomerZone z ON c.ZoneId = z.Id
+                INNER JOIN CustomerFrequency f ON c.FrequencyId = f.Id
+                WHERE 
+                    c.Active = 1";
+                var result = connection.Query<CustomerDto>(query).ToList();
+                return result;
+            }
         }
         public List<CustomerDto> AddCustomer(Customer request)
         {
@@ -564,6 +555,27 @@ namespace Pos.WebApi.Features.Customers.Services
                 currentSupplier.Balance += total;
                 _context.SaveChanges();
                 return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public async Task<bool> UpdateBalanceCustomerAsync(int customerId, decimal total)
+        {
+            try
+            {
+                var currentCustomer = await _context.Customer
+                    .FirstOrDefaultAsync(x => x.CustomerId == customerId);
+
+                if (currentCustomer != null)
+                {
+                    currentCustomer.Balance += total;
+                    await _context.SaveChangesAsync();
+                    return true;
+                }
+                return false;
             }
             catch
             {

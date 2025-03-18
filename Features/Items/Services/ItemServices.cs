@@ -8,6 +8,7 @@ using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Asn1.Ocsp;
 using Pos.WebApi.Features.Purchase.Dto;
 using Pos.WebApi.Features.Purchase.Entities;
+using Pos.WebApi.Features.Customers.Entities;
 
 namespace Pos.WebApi.Features.Items.Services
 {
@@ -144,6 +145,14 @@ namespace Pos.WebApi.Features.Items.Services
             currentItemFamily.UpdateBy = request.CreateBy;
             currentItemFamily.UpdateDate = DateTime.Now;
             currentItemFamily.Active = request.Active;
+            if (!request.Active)
+            {
+                var items = _context.Item.Where(x => x.ItemFamilyId == request.ItemFamilyId).Count();
+                if (items > 0)
+                {
+                    throw new System.Exception(@$"Tiene {items} articulos, asignados a esta familia, porfavor actualice los articulos, antes de inactivar.");
+                }
+            }
             _context.SaveChanges();
             return GetItemFamily();
         }
@@ -520,8 +529,8 @@ namespace Pos.WebApi.Features.Items.Services
         {
             var stock = _context.ItemWareHouse.Where(x => x.WhsCode == whsCode).ToList();
             var item = _context.Item.Where(x => x.Active == true).ToList();
-            var categoryId = item.Select(x => x.ItemCategoryId).Distinct().ToList();
-            var category = _context.ItemCategory.Where(x => categoryId.Contains(x.ItemCategoryId)).ToList();
+            var categoryId = item.Select(x => x.ItemFamilyId).Distinct().ToList();
+            var category = _context.ItemFamily.Where(x => categoryId.Contains(x.ItemFamilyId)).ToList();
             var unitId = item.Select(x => x.UnitOfMeasureId).Distinct().ToList();
             var unit = _context.UnitOfMeasure.Where(x => unitId.Contains(x.UnitOfMeasureId)).ToList();
             var whs = _context.WareHouse.Where(x => x.WhsCode == whsCode).ToList();
@@ -530,7 +539,7 @@ namespace Pos.WebApi.Features.Items.Services
             var itemService = _context.Item.Where(x => x.Active && !x.InventoryItem && x.SalesItem).ToList();
             var result = (from iw in stock
                           join i in item on iw.ItemId equals i.ItemId
-                          join c in category on i.ItemCategoryId equals c.ItemCategoryId
+                          join c in category on i.ItemFamilyId equals c.ItemFamilyId
                           join um in unit on i.UnitOfMeasureId equals um.UnitOfMeasureId
                           join w in whs on iw.WhsCode equals w.WhsCode
                           join p in prices on iw.ItemId equals p.ItemId
@@ -548,7 +557,7 @@ namespace Pos.WebApi.Features.Items.Services
                               ItemName = i.ItemName,
                               UnitOfMeasureId = i.UnitOfMeasureId,
                               UnitOfMeasureName = um.UnitOfMeasureName,
-                              ItemCategoryName = c.ItemCategoryName,
+                              ItemCategoryName = c.ItemFamilyName,
                               Stock = iw.Stock,
                               AvgPrice = iw.AvgPrice,
                               PriceSales = s?.PriceSpecial ?? p.Price,
@@ -558,7 +567,7 @@ namespace Pos.WebApi.Features.Items.Services
                           }).Union
               (from iw in itemService
                join i in item on iw.ItemId equals i.ItemId
-               join c in category on i.ItemCategoryId equals c.ItemCategoryId
+               join c in category on i.ItemFamilyId equals c.ItemFamilyId
                join um in unit on i.UnitOfMeasureId equals um.UnitOfMeasureId
                join p in prices on iw.ItemId equals p.ItemId
                join s in specialPrices on iw.ItemId equals s.ItemId into specialPrice
@@ -575,7 +584,7 @@ namespace Pos.WebApi.Features.Items.Services
                    ItemName = i.ItemName,
                    UnitOfMeasureId = i.UnitOfMeasureId,
                    UnitOfMeasureName = um.UnitOfMeasureName,
-                   ItemCategoryName = c.ItemCategoryName,
+                   ItemCategoryName = c.ItemFamilyName,
                    Stock = 1,
                    AvgPrice = 1,
                    PriceSales = s?.PriceSpecial ?? p.Price,
@@ -755,6 +764,11 @@ namespace Pos.WebApi.Features.Items.Services
             }
             _context.PriceListDetail.AddRange(priceDetail);
             _context.SaveChanges();
+        }
+
+        public List<PriceSpecialCustomerDetail> GetAllPriceSpecialCustomerBySeller()
+        {
+            return _context.PriceSpecialCustomerDetail.Where(x=> x.PriceSpecial>0).ToList();
         }
     }
 }

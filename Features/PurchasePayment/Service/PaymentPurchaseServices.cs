@@ -172,7 +172,8 @@ namespace Pos.WebApi.Features.PurchasePayment.Service
                     Documents = "Pago de factura de Compra",
                     DocumentReferent = request.DocId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = request.DocDate,
+                    UUID = Guid.NewGuid().ToString()
                 };
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _supplierServices.UpdateBalanceSupplier(request.SupplierId, request.DocTotal*-1);
@@ -240,7 +241,8 @@ namespace Pos.WebApi.Features.PurchasePayment.Service
                     Documents = "Pago de factura de Compra - Anulacion",
                     DocumentReferent = currentPayment.DocId,
                     CreateBy = currentPayment.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = DateTime.Now,
+                    UUID = Guid.NewGuid().ToString()
                 };
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _supplierServices.UpdateBalanceSupplier(currentPayment.SupplierId, currentPayment.DocTotal);

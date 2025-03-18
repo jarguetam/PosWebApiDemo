@@ -15,6 +15,8 @@ using Pos.WebApi.Features.Customers.Dto;
 using Pos.WebApi.Features.Expenses.Entities;
 using Pos.WebApi.Features.Liquidations.Entities;
 using Pos.WebApi.Features.Items.Dto;
+using Pos.WebApi.Features.Reports.Dto;
+using Pos.WebApi.Features.InventoryTransactions.Dto;
 
 namespace Pos.WebApi.Infraestructure
 {
@@ -103,7 +105,14 @@ namespace Pos.WebApi.Infraestructure
         public DbSet<Liquidation> Liquidation { get; set; }
         public DbSet<LiquidationDetail> LiquidationDetail { get; set; }
         public DbSet<LiquidationView> LiquidationView { get; set; }
+        public DbSet<MoneyBill> MoneyBill { get; set; }
+        public DbSet<MoneyLiquidation> MoneyLiquidation { get; set; }
+        public DbSet<MoneyLiquidationDetail> MoneyLiquidationDetail { get; set; }
+
         public DbSet<ItemWareHouseViewModel> ItemWareHouseViewModel { get; set; }
+
+        //Report
+        public DbSet<ReportView> ReportView { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -155,6 +164,7 @@ namespace Pos.WebApi.Infraestructure
             new InventoryRequestTransferDetail.Map(modelBuilder.Entity<InventoryRequestTransferDetail>());
             new InventoryReturn.Map(modelBuilder.Entity<InventoryReturn>());
             new InventoryReturnDetail.Map(modelBuilder.Entity<InventoryReturnDetail>());
+           
             //Purchase
             new OrderPurchase.Map(modelBuilder.Entity<OrderPurchase>());
             new OrderPurchaseDetail.Map(modelBuilder.Entity<OrderPurchaseDetail>());
@@ -184,9 +194,16 @@ namespace Pos.WebApi.Infraestructure
             //Liquidation         
             new Liquidation.Map(modelBuilder.Entity<Liquidation>());
             new LiquidationDetail.Map(modelBuilder.Entity<LiquidationDetail>());
+            new MoneyBill.Map(modelBuilder.Entity<MoneyBill>());
+            new MoneyLiquidation.Map(modelBuilder.Entity<MoneyLiquidation>());
+            new MoneyLiquidationDetail.Map(modelBuilder.Entity<MoneyLiquidationDetail>());
+            //Report
+            new ReportView.Map(modelBuilder.Entity<ReportView>());
+
             modelBuilder.Entity<LiquidationView>().ToTable("LiquidationView", "dbo")
               .HasKey(c => c.Id);
             modelBuilder.Entity<ItemWareHouseViewModel>().ToTable("ItemPriceView", "dbo").HasNoKey();
+            modelBuilder.Entity<InventoryReturnDetailDTO>().HasNoKey().ToView(null);
             base.OnModelCreating(modelBuilder);
         }
     }

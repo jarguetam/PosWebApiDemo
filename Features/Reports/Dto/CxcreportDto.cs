@@ -7,7 +7,7 @@ namespace Pos.WebApi.Features.Reports.Dto
     {
         public string CustomerCode { get; set; }
         public string CustomerName { get; set; }
-        public List<CxcreportDetailDto> Detail {  get; set; }    
+        public List<CxcreportDetailDto> Detail {  get; set; }
     }
 
     public class CxcreportDetailDto

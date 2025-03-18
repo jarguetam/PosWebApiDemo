@@ -541,7 +541,8 @@ namespace Pos.WebApi.Features.Purchase.Services
                     Documents = "Factura de Compra",
                     DocumentReferent = request.DocId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = DateTime.Now,
+                    UUID = Guid.NewGuid().ToString()
                 };
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _supplierServices.UpdateBalanceSupplier(request.SupplierId, request.DocTotal);
@@ -694,7 +695,8 @@ namespace Pos.WebApi.Features.Purchase.Services
                     Documents = "Factura de Compra - Anulacion",
                     DocumentReferent = currentInvoice.DocId,
                     CreateBy = currentInvoice.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = DateTime.Now,
+                    UUID = Guid.NewGuid().ToString()
                 };
                 _bPJornalServices.AddLineBPJournal(bpjournal);
                 _supplierServices.UpdateBalanceSupplier(currentInvoice.SupplierId, currentInvoice.DocTotal * -1);
@@ -786,7 +788,8 @@ namespace Pos.WebApi.Features.Purchase.Services
                     Documents = "Pago de factura de Compra",
                     DocumentReferent = request.DocId,
                     CreateBy = request.CreateBy,
-                    CreateDate = DateTime.Now
+                    CreateDate = DateTime.Now,
+                    UUID = Guid.NewGuid().ToString()
                 };
                 //Cerramos las facturas
                 request.Detail.ForEach(x => CompleteInvoicePurchase(x.InvoiceId, x.SumApplied));

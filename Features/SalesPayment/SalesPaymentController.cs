@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Pos.WebApi.Features.SalesPayment.Entities;
 using Pos.WebApi.Features.SalesPayment.Service;
 using System;
+using System.Threading.Tasks;
 
 namespace Pos.WebApi.Features.SalesPayment
 {
@@ -113,11 +114,11 @@ namespace Pos.WebApi.Features.SalesPayment
             }
         }
         [HttpPut("CanceledPaymentSales{docId}")]
-        public IActionResult CanceledPaymentSales(int docId)
+        public async Task<IActionResult> CanceledPaymentSales(int docId)
         {
             try
             {
-                var result = _paymentServices.CanceledPaymentSales(docId);
+                var result = await _paymentServices.CanceledPaymentSales(docId);
                 return Ok(result);
             }
             catch (Exception ex)

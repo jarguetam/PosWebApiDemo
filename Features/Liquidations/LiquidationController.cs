@@ -96,5 +96,80 @@ namespace Pos.WebApi.Features.Liquidations
                 return BadRequest(new { message = mensaje });
             }
         }
+
+        [HttpGet("GetLiquidationSellerResum/{sellerId}/{date}")]
+        public IActionResult GetLiquidationSellerResum(int sellerId, DateTime date)
+        {
+            try
+            {
+                var result = _liquidationServices.GetLiquidationSellerResums(sellerId, date);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return BadRequest(new { message = mensaje });
+            }
+        }
+
+        [HttpGet("GetMoneyBill")]
+        public IActionResult GetMoneyBill()
+        {
+            try
+            {
+                var result = _liquidationServices.GetMoneyBill();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return BadRequest(new { message = mensaje });
+            }
+        }
+
+        [HttpPost("AddMoneyLiquidation")]
+        public IActionResult AddMoneyLiquidation([FromBody] MoneyLiquidation request)
+        {
+            try
+            {
+                var result = _liquidationServices.AddMoneyLiquidation(request);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return BadRequest(new { message = mensaje });
+            }
+        }
+
+        [HttpPost("EditMoneyLiquidation")]
+        public IActionResult EditMoneyLiquidation([FromBody] MoneyLiquidation request)
+        {
+            try
+            {
+                var result = _liquidationServices.UpdateMoneyLiquidation(request);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return BadRequest(new { message = mensaje });
+            }
+        }
+
+        [HttpGet("GetLiquidationMoney/{From}/{To}")]
+        public IActionResult GetLiquidationMoney(DateTime From, DateTime To)
+        {
+            try
+            {
+                var result = _liquidationServices.GetMoneyLiquidationByDate(From, To);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return BadRequest(new { message = mensaje });
+            }
+        }
     }
 }

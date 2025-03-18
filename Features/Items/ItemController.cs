@@ -366,6 +366,21 @@ namespace Pos.WebApi.Features.Items
             }
         }
 
+        [HttpGet("GetAllPriceSpecialCustomer")]
+        public IActionResult GetAllPriceSpecialCustomer()
+        {
+            try
+            {
+                var result = _services.GetAllPriceSpecialCustomerBySeller();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return BadRequest(new { message = mensaje });
+            }
+        }
+
 
     }
 }

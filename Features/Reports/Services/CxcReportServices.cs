@@ -8,7 +8,7 @@ using System.IO;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using System.Linq;
-using QuestPDF.Previewer;
+
 
 namespace Pos.WebApi.Features.Reports.Services
 {
@@ -132,9 +132,7 @@ namespace Pos.WebApi.Features.Reports.Services
                 static IContainer CellStyle(IContainer container)
                 {
                     return container.DefaultTextStyle(x => x.Medium()).PaddingVertical(0).BorderBottom(0.1f).BorderColor(Colors.White);
-                }
-
-               
+                }       
                 foreach (var item in _result)
                 {
                     table.Cell().Text(item.CustomerCode).Bold().FontSize(10);

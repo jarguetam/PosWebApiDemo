@@ -17,5 +17,7 @@ namespace Pos.WebApi.Features.Items.Dto
         public decimal Weight { get; set; }
         public int CustomerId { get; set; }
         public int ListPriceId { get; set; }
+        public int Quantity { get; set; } = 0;
+
     }
 }

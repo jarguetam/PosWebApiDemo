@@ -8,6 +8,8 @@ using Pos.WebApi.Features.Items.Entities;
 using Pos.WebApi.Features.Items.Services;
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace Pos.WebApi.Features.InventoryTransactions
 {
@@ -290,6 +292,21 @@ namespace Pos.WebApi.Features.InventoryTransactions
             }
         }
         //Request Transfer
+        [HttpGet("GetItemsToTransfer")]
+        public async Task<IActionResult> GetItemsToTransferAsync(int almacenOrigen, int almacenDestino)
+        {
+            try
+            {
+                var result =  await _service.GetItemsToTransfer(almacenOrigen, almacenDestino);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return BadRequest(new { message = mensaje });
+            }
+        }
+
         [HttpGet("GetInventoryRequestTransfer")]
         public IActionResult GetInventoryRequestTransfer()
         {
@@ -354,6 +371,21 @@ namespace Pos.WebApi.Features.InventoryTransactions
             try
             {
                 var result = _service.AddInventoryRequestTransfer(request);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return BadRequest(new { message = mensaje });
+            }
+        }
+
+        [HttpPut("UpdateInventoryRequestTransfer")]
+        public IActionResult UpdateInventoryRequestTransfer(InventoryRequestTransfer request)
+        {
+            try
+            {
+                var result = _service.UpdateInventoryRequestTransfer(request);
                 return Ok(result);
             }
             catch (Exception ex)

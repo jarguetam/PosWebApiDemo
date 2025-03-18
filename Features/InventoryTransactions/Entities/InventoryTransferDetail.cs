@@ -11,6 +11,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Entities
         public int TransferId { get; set; }
         public int ItemId { get; set; }
         public decimal Quantity { get; set; }
+        public string QuantityUnit { get; set; }
         public decimal Price { get; set; }
         public DateTime DueDate { get; set; }
         public decimal LineTotal { get; set; }
@@ -40,6 +41,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Entities
                 builder.Property(x => x.ItemId).HasColumnName("ItemId");
                 builder.Property(x => x.UnitOfMeasureId).HasColumnName("UnitOfMeasureId");
                 builder.Property(x => x.Quantity).HasColumnName("Quantity");
+                builder.Property(x => x.QuantityUnit).HasColumnName("QuantityUnit");
                 builder.Property(x => x.Price).HasColumnName("Price");
                 builder.Property(x => x.DueDate).HasColumnName("DueDate");
                 builder.Property(x => x.LineTotal).HasColumnName("LineTotal");

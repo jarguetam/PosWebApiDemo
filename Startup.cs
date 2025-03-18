@@ -24,6 +24,8 @@ using Pos.WebApi.Features.Dashboard;
 using Pos.WebApi.Features.Reports.Services;
 using Pos.WebApi.Features.Expenses.Services;
 using Pos.WebApi.Features.Liquidations.Services;
+using Newtonsoft.Json.Serialization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace Pos.WebApi
 {
@@ -42,6 +44,25 @@ namespace Pos.WebApi
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "Pos.WebApi", Version = "v1" });
+                var securityScheme = new OpenApiSecurityScheme
+                {
+                    Name = "JWT Authentication",
+                    Description = "JWT Bearer Token",
+                    In = ParameterLocation.Header,
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT",
+                    Reference = new OpenApiReference
+                    {
+                        Id = JwtBearerDefaults.AuthenticationScheme,
+                        Type = ReferenceType.SecurityScheme
+                    }
+                };
+                c.AddSecurityDefinition(securityScheme.Reference.Id, securityScheme);
+                c.AddSecurityRequirement(new OpenApiSecurityRequirement
+                {
+                    {securityScheme, new string[]{ } }
+                });
             });
 
             services.AddDbContext<PosDbContext>(
@@ -55,12 +76,10 @@ namespace Pos.WebApi
             options.AddPolicy(name: MiCors,
                 builder =>
                 {
-                    builder.WithOrigins("https://diproal-app.onrender.com",
-                        "http://192.168.10.10:9096"
-                        );
-                    builder.WithMethods("*");
-                    builder.WithHeaders("*");
-                    builder.SetIsOriginAllowedToAllowWildcardSubdomains();
+                    builder
+                     .AllowAnyOrigin()
+                     .AllowAnyMethod()
+                     .AllowAnyHeader();
                 })
             );
 
@@ -85,8 +104,18 @@ namespace Pos.WebApi
             services.AddTransient<ReportServices, ReportServices>();
             services.AddTransient<ExpenseServices, ExpenseServices>();
             services.AddTransient<LiquidationServices, LiquidationServices>();          
+            services.AddTransient<GenericDataService, GenericDataService>();
+            services.AddMemoryCache();
             services.AddTokenAuthentication(Configuration);
-            services.AddControllers();
+
+            services.AddControllers().AddNewtonsoftJson(options =>
+            {
+                options.SerializerSettings.ContractResolver = new DefaultContractResolver
+                {
+                    NamingStrategy = new CamelCaseNamingStrategy()
+                };
+            });
+
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -101,7 +130,6 @@ namespace Pos.WebApi
             app.UseHttpsRedirection();
 
             app.UseRouting();
-            //app.UseSentryTracing();
 
             //Habilitamos los cords para usar en la web OJO Solo en pruebas en produccion hay que especificiar el origen
             app.UseCors(x => x

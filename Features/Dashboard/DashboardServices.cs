@@ -1,4 +1,6 @@
-﻿using Pos.WebApi.Features.Customers.Services;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Pos.WebApi.Features.Customers.Services;
 using Pos.WebApi.Features.Dashboard.Dto;
 using Pos.WebApi.Features.Items.Services;
 using Pos.WebApi.Features.Purchase.Services;
@@ -11,331 +13,432 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Pos.WebApi.Features.Dashboard
 {
     public class DashboardServices
     {
-        private readonly CustomerServices _customerServices;
-        private readonly SupplierServices _supplierServices;
-        private readonly ItemServices _itemServices;
-        private readonly PurchaseServices _purchaseServices;
-        private readonly SalesServices _salesServices;
-        private readonly PaymentSaleServices _paymentSaleServices;
-        private readonly PaymentPurchaseServices _paymentPurchaseServices;
         private readonly PosDbContext _context;
+        private readonly IMemoryCache _cache;
 
-        public DashboardServices(CustomerServices customerServices, SupplierServices supplierServices, ItemServices itemServices, PurchaseServices purchaseServices, SalesServices salesServices, PaymentSaleServices paymentSaleServices, PaymentPurchaseServices paymentPurchaseServices, PosDbContext posDbContext)
+        public DashboardServices(PosDbContext posDbContext, IMemoryCache cache)
         {
-            _customerServices = customerServices;
-            _supplierServices = supplierServices;
-            _itemServices = itemServices;
-            _purchaseServices = purchaseServices;
-            _salesServices = salesServices;
-            _paymentSaleServices = paymentSaleServices;
-            _paymentPurchaseServices = paymentPurchaseServices;
             _context = posDbContext;
+            _cache = cache;
         }
 
-        public List<DashboardDto> GetCustomerActive()
+        public async Task<List<DashboardDto>> GetCustomerActiveAsync()
         {
-            int activeCustomerCount = _context.Customer.Count(x => x.Active);
-            var result = new List<DashboardDto>
+            string cacheKey = "CustomerActive";
+            return await _cache.GetOrCreateAsync(cacheKey, async entry =>
             {
-                new DashboardDto { Description = "Clientes", Qty = activeCustomerCount }
-            };
-            return result;
-        }
-
-        public List<DashboardDto> GetSupplierActive()
-        {
-            int activeSupplierCount = _context.Supplier.Count(x => x.Active);
-            var result = new List<DashboardDto>
+                entry.SlidingExpiration = TimeSpan.FromMinutes(30);
+                var count = await _context.Customer.CountAsync(x => x.Active);
+                return new List<DashboardDto>
             {
-                new DashboardDto { Description = "Proveedores", Qty = activeSupplierCount }
+                new DashboardDto { Description = "Clientes", Qty = count }
             };
-            return result;
+            });
         }
 
-        public List<DashboardDto> GetItemActive()
+        public async Task<List<DashboardDto>> GetSupplierActiveAsync()
         {
-            int activeItemCount = _context.Item.Count(x => x.Active);
-            var result = new List<DashboardDto>
+            string cacheKey = "SupplierActive";
+            return await _cache.GetOrCreateAsync(cacheKey, async entry =>
             {
-                new DashboardDto { Description = "Articulos", Qty = activeItemCount }
-            };
-            return result;
-        }
-
-        public List<DashboardDto> GetWareHouseActive()
-        {
-            int activeWareHouseCount = _context.WareHouse.Count(x => x.Active);
-            var result = new List<DashboardDto>
+                entry.SlidingExpiration = TimeSpan.FromMinutes(30);
+                var count = await _context.Supplier.CountAsync(x => x.Active);
+                return new List<DashboardDto>
             {
-                new DashboardDto { Description = "Almacenes", Qty = activeWareHouseCount }
+                new DashboardDto { Description = "Proveedores", Qty = count }
             };
-            return result;
+            });
         }
 
-        public List<DashboardDto> GetIncomePerDay(int userId)
+        public async Task<List<DashboardDto>> GetItemActiveAsync()
         {
-            var rol = _context.User.Where(x => x.UserId == userId).FirstOrDefault().RoleId;
+            string cacheKey = "ItemActive";
+            return await _cache.GetOrCreateAsync(cacheKey, async entry =>
+            {
+                entry.SlidingExpiration = TimeSpan.FromMinutes(30);
+                var count = await _context.Item.CountAsync(x => x.Active);
+                return new List<DashboardDto>
+            {
+                new DashboardDto { Description = "Articulos", Qty = count }
+            };
+            });
+        }
+
+        public async Task<List<DashboardDto>> GetWareHouseActiveAsync()
+        {
+            string cacheKey = "WareHouseActive";
+            return await _cache.GetOrCreateAsync(cacheKey, async entry =>
+            {
+                entry.SlidingExpiration = TimeSpan.FromMinutes(30);
+                var count = await _context.WareHouse.CountAsync(x => x.Active);
+                return new List<DashboardDto>
+            {
+                new DashboardDto { Description = "Almacenes", Qty = count }
+            };
+            });
+        }
+
+        public async Task<List<DashboardDto>> GetIncomePerDayAsync(int userId)
+        {
+            var rol = await _context.User
+                .Where(x => x.UserId == userId)
+                .Select(x => new { x.RoleId,x.SellerId })
+                .FirstOrDefaultAsync();
 
             DateTime startDate = DateTime.Today.AddDays(-6);
             var last7Days = Enumerable.Range(0, 7).Select(i => startDate.AddDays(i)).ToList();
-            var invoice = _context.InvoiceSale
-                .Where(x => x.DocDate >= startDate && (rol == 1 || x.CreateBy == userId) && !x.Canceled)
+
+            var invoice = await _context.InvoiceSale
+                .Where(x => x.DocDate >= startDate && (rol.RoleId == 1 || x.SellerId == rol.SellerId) && !x.Canceled)
                 .GroupBy(x => x.DocDate.Date)
-                .Select(g => new DashboardDto { Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(g.Key.ToString("dddd")), Qty = g.Sum(x => x.SubTotal) })
-                .ToList();
-            var result = last7Days.GroupJoin(
-                invoice,
-                x => CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(x.ToString("dddd")),
-                y => y.Description,
-                (x, y) => new DashboardDto { Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(x.ToString("dddd")), Qty = y.Sum(z => z?.Qty ?? 0) }
-            ).ToList();
-            return result;
-        }
-
-        public List<DashboardDto> GetOrderBySeller(int userId)
-        {
-            var rol = _context.User.Where(x => x.UserId == userId).FirstOrDefault().RoleId;
-            var result = _context
-                .OrderSale
-                .Join(_context.Seller, os => os.SellerId, s => s.SellerId, (os, s) => new { OrderSale = os, Seller = s })
-                .Where(x => x.OrderSale.DocDate.Month == DateTime.Now.Month && (rol == 1 || x.OrderSale.CreateBy == userId) && !x.OrderSale.Canceled)
-                .GroupBy(x => x.Seller.SellerName)
-                .Select(g => new DashboardDto { Description = g.Key, Qty = g.Count() })
-                .ToList();
-            return result;
-        }
-
-        public List<DashboardDto> GetStockWareHouse()
-        {
-            var result = _context
-                .ItemWareHouse
-                .Join(_context.WareHouse, iw => iw.WhsCode, wh => wh.WhsCode, (iw, wh) => new { ItemWareHouse = iw, WareHouse = wh })
-                .GroupBy(x => x.WareHouse.WhsName)
-                .Select(g => new DashboardDto { Description = g.Key, Qty = g.Sum(x => x.ItemWareHouse.Stock) })
-                .ToList();
-
-            return result;
-        }
-
-        public List<DashboardDto> GetStockType()
-        {
-            var result = _context
-                .ItemWareHouse
-                .Join(_context.Item, iw => iw.ItemId, item => item.ItemId, (iw, item) => new { ItemWareHouse = iw, Item = item })
-                .Join(_context.ItemCategory, combined => combined.Item.ItemCategoryId, ic => ic.ItemCategoryId, (combined, ic) => new { ItemWareHouse = combined.ItemWareHouse, ItemCategory = ic })
-                .GroupBy(x => x.ItemCategory.ItemCategoryName) // Agrupar por el nombre de la categoría
-                .Select(g => new DashboardDto { Description = g.Key.ToString(), Qty = g.Sum(x => x.ItemWareHouse.Stock) })
-                .ToList();
-            return result;
-        }
-
-        public List<DashboardDto> GetInvoicePerMonth(int userId)
-        {
-            var rol = _context.User.Where(x => x.UserId == userId).FirstOrDefault().RoleId;
-            var currentYear = DateTime.Now.Year;
-
-            var invoicesByMonth = (
-                from month in Enumerable.Range(1, 12)
-                let monthStart = new DateTime(currentYear, month, 1)
-                join invoice in _context.InvoiceSale.Where(x => !x.Canceled)
-                    on new { Month = monthStart.Month, Year = monthStart.Year }
-                    equals new { Month = invoice.DocDate.Month, Year = invoice.DocDate.Year }
-                    into invoicesInMonth
-                from invoice in invoicesInMonth.DefaultIfEmpty()
-                where invoice == null || (invoice.DocDate.Year == currentYear && !invoice.Canceled && (rol == 1 || invoice.CreateBy == userId))
-                group invoice by CultureInfo.CurrentCulture.TextInfo.ToTitleCase(monthStart.ToString("MMMM")) into monthGroup
-                select new DashboardDto
+                .Select(g => new DashboardDto
                 {
-                    Description = monthGroup.Key,
-                    Qty = monthGroup.Sum(v => v?.SubTotal ?? 0) // Handle null invoices
+                    Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(g.Key.ToString("dddd")),
+                    Qty = g.Sum(x => x.SubTotal)
                 })
-                .OrderBy(v => DateTime.ParseExact(v.Description, "MMMM", CultureInfo.CurrentCulture).Month)
-                .ToList();
+                .ToListAsync();
 
-            return invoicesByMonth;
+            return last7Days
+                .GroupJoin(
+                    invoice,
+                    x => CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(x.ToString("dddd")),
+                    y => y.Description,
+                    (x, y) => new DashboardDto
+                    {
+                        Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(x.ToString("dddd")),
+                        Qty = y.Sum(z => z?.Qty ?? 0)
+                    }
+                ).ToList();
         }
 
-        public List<DashboardDto> GetCostEffectivenessPerMonth(int userId)
+        public async Task<List<DashboardDto>> GetStockWareHouseAsync()
         {
-            var rol = _context.User.Where(x => x.UserId == userId).FirstOrDefault().RoleId;
-            var currentYear = DateTime.Now.Year;
-            var months = new[] { "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre" }
-                .Select((m, i) => new DashboardDto { Description = m, Qty = 0 }).ToList();
-            var query = (from i in _context.InvoiceSale
-                         join id in _context.InvoiceSaleDetail on i.DocId equals id.DocId
-                         where !i.Canceled && i.DocDate.Year == currentYear && (rol == 1 || i.CreateBy == userId)
-                         group new { id.Cost, id.Quantity, id.LineTotal } by (i.DocDate.Month) into g
-                         select new DashboardDto
-                         {
-                             Description = g.Key.ToString(),
-                             Qty = ((g.Sum(x => x.LineTotal) - g.Sum(x => x.Cost * x.Quantity)) / g.Sum(x => x.LineTotal)) * 100
-                         });
-
-            //Execute LINQ query
-            var result = query.ToList();
-            var finalResult = months.GroupJoin(result,
-                m => (Array.IndexOf(months.Select(x => x.Description).ToArray(), m.Description) + 1).ToString(),
-                r => r.Description,
-                (m, r) => new DashboardDto { Description = m.Description, Qty = r.FirstOrDefault()?.Qty ?? 0 }).ToList();
-            return finalResult;
-        }
-
-        public List<DashboardDto> GetSaleBySeller(int userId)
-        {
-            var rol = _context.User.Where(x => x.UserId == userId).FirstOrDefault().RoleId;
-            var result = _context
-                .InvoiceSale
-                .Join(_context.Seller, os => os.SellerId, s => s.SellerId, (os, s) => new { OrderSale = os, Seller = s })
-                .Where(x => x.OrderSale.DocDate.Month == DateTime.Now.Month && !x.OrderSale.Canceled && (rol == 1 || x.OrderSale.CreateBy == userId))
-                .GroupBy(x => x.Seller.SellerName)
-                .Select(g => new DashboardDto { Description = g.Key, Qty = g.Sum(x=> x.OrderSale.SubTotal)})
-                .ToList();
-            return result;
-        }
-        public List<DashboardDto> GetCXC(int userId)
-        {
-            var rol = _context.User
-               .Where(x => x.UserId == userId)
-               .Select(x => new { x.RoleId, x.SellerId})
-               .FirstOrDefault();
-
-            decimal balanceCustomers = _context.InvoiceSale
-                .Where(x=> (rol.RoleId == 1 || x.SellerId == rol.SellerId))
-                .Sum(x => x.Balance);
-
-            var result = new List<DashboardDto>
+            string cacheKey = $"StockWareHouse_{DateTime.Now.Date}";
+            return await _cache.GetOrCreateAsync(cacheKey, async entry =>
             {
-                new DashboardDto { Description = "CXC", Qty = balanceCustomers }
-            };
-            return result;
+                entry.SlidingExpiration = TimeSpan.FromHours(1);
+                return await _context.ItemWareHouse
+                    .Join(_context.WareHouse,
+                        iw => iw.WhsCode,
+                        wh => wh.WhsCode,
+                        (iw, wh) => new { ItemWareHouse = iw, WareHouse = wh })
+                    .GroupBy(x => x.WareHouse.WhsName)
+                    .Select(g => new DashboardDto
+                    {
+                        Description = g.Key,
+                        Qty = g.Sum(x => x.ItemWareHouse.Stock)
+                    })
+                    .ToListAsync();
+            });
         }
-        public List<DashboardDto> GetItemBestSells(int userId)
+        public async Task<List<DashboardDto>> GetStockTypeAsync()
         {
-            var rol = _context.User
+            string cacheKey = $"StockType_{DateTime.Now.Date}";
+            return await _cache.GetOrCreateAsync(cacheKey, async entry =>
+            {
+                entry.SlidingExpiration = TimeSpan.FromHours(1);
+                return await _context.ItemWareHouse
+                    .Join(_context.Item,
+                        iw => iw.ItemId,
+                        item => item.ItemId,
+                        (iw, item) => new { ItemWareHouse = iw, Item = item })
+                    .Join(_context.ItemCategory,
+                        combined => combined.Item.ItemCategoryId,
+                        ic => ic.ItemCategoryId,
+                        (combined, ic) => new { ItemWareHouse = combined.ItemWareHouse, ItemCategory = ic })
+                    .GroupBy(x => x.ItemCategory.ItemCategoryName)
+                    .Select(g => new DashboardDto
+                    {
+                        Description = g.Key,
+                        Qty = g.Sum(x => x.ItemWareHouse.Stock)
+                    })
+                    .ToListAsync();
+            });
+        }
+
+        public async Task<List<DashboardDto>> GetOrderBySellerAsync(int userId)
+        {
+            var rol = await _context.User
                 .Where(x => x.UserId == userId)
                 .Select(x => x.RoleId)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
-            var result = (from i in _context.InvoiceSale
-                          join id in _context.InvoiceSaleDetail on i.DocId equals id.DocId
-                          join it in _context.Item on id.ItemId equals it.ItemId
-                          where (rol == 1 || i.CreateBy == userId) && i.DocDate.Year == DateTime.Now.Year && !i.Canceled
-                          group new { id.LineTotal, it.ItemName, it.ItemCode } by id.ItemId into grouped
-                          orderby grouped.Sum(x => x.LineTotal) descending
-                          select new DashboardDto
-                          {
-                              Description = $"{grouped.First().ItemCode} - {grouped.First().ItemName}",
-                              Qty = grouped.Sum(x => x.LineTotal)
-                          })
-                          .Take(5)
-                          .ToList();
-            return result;
+            return await _context.OrderSale
+                .Join(_context.Seller,
+                    os => os.SellerId,
+                    s => s.SellerId,
+                    (os, s) => new { OrderSale = os, Seller = s })
+                .Where(x => x.OrderSale.DocDate.Month == DateTime.Now.Month &&
+                           (rol == 1 || x.OrderSale.CreateBy == userId) &&
+                           !x.OrderSale.Canceled)
+                .GroupBy(x => x.Seller.SellerName)
+                .Select(g => new DashboardDto
+                {
+                    Description = g.Key,
+                    Qty = g.Count()
+                })
+                .ToListAsync();
         }
 
-        //Purchase
-        public List<DashboardDto> GetIncomePurchasePerDay(int userId)
+        public async Task<List<DashboardDto>> GetInvoicePerMonthAsync(int userId)
         {
-            var rol = _context.User.Where(x => x.UserId == userId).FirstOrDefault().RoleId;
+            var rol = await _context.User
+                .Where(x => x.UserId == userId)
+                .Select(x => new { x.RoleId, x.SellerId})
+                .FirstOrDefaultAsync();
+
+            var currentYear = DateTime.Now.Year;
+            var months = Enumerable.Range(1, 12)
+                .Select(month => new DateTime(currentYear, month, 1))
+                .ToList();
+
+            var invoices = await _context.InvoiceSale
+                .Where(x => x.DocDate.Year == currentYear &&
+                           !x.Canceled &&
+                           (rol.RoleId == 1 || x.SellerId == rol.SellerId))
+                .GroupBy(x => x.DocDate.Month)
+                .Select(g => new
+                {
+                    Month = g.Key,
+                    Total = g.Sum(x => x.SubTotal)
+                })
+                .ToListAsync();
+
+            return months
+                .Select(monthDate => new DashboardDto
+                {
+                    Description = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(monthDate.ToString("MMMM")),
+                    Qty = invoices.FirstOrDefault(i => i.Month == monthDate.Month)?.Total ?? 0
+                })
+                .ToList();
+        }
+
+        public async Task<List<DashboardDto>> GetCostEffectivenessPerMonthAsync(int userId)
+        {
+            var rol = await _context.User
+                .Where(x => x.UserId == userId)
+                .Select(x => x.RoleId)
+                .FirstOrDefaultAsync();
+
+            var currentYear = DateTime.Now.Year;
+            var months = new[] { "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre" };
+
+            var effectivenessData = await _context.InvoiceSale
+                .Where(x => !x.Canceled &&
+                           x.DocDate.Year == currentYear &&
+                           (rol == 1 || x.CreateBy == userId))
+                .Join(_context.InvoiceSaleDetail,
+                    i => i.DocId,
+                    id => id.DocId,
+                    (i, id) => new { i.DocDate, id.Cost, id.Quantity, id.LineTotal })
+                .GroupBy(x => x.DocDate.Month)
+                .Select(g => new
+                {
+                    Month = g.Key,
+                    Effectiveness = ((g.Sum(x => x.LineTotal) - g.Sum(x => x.Cost * x.Quantity)) /
+                                    g.Sum(x => x.LineTotal)) * 100
+                })
+                .ToListAsync();
+
+            return months
+                .Select((month, index) => new DashboardDto
+                {
+                    Description = month,
+                    Qty = effectivenessData.FirstOrDefault(x => x.Month == index + 1)?.Effectiveness ?? 0
+                })
+                .ToList();
+        }
+
+        public async Task<List<DashboardDto>> GetCXCAsync(int userId)
+        {
+            var userInfo = await _context.User
+                .Where(x => x.UserId == userId)
+                .Select(x => new { x.RoleId, x.SellerId })
+                .FirstOrDefaultAsync();
+
+            var balanceCustomers = await _context.InvoiceSale
+                .Where(x => (userInfo.RoleId == 1 || x.SellerId == userInfo.SellerId))
+                .SumAsync(x => x.Balance);
+
+            return new List<DashboardDto>
+        {
+            new DashboardDto { Description = "CXC", Qty = balanceCustomers }
+        };
+        }
+
+        public async Task<List<DashboardDto>> GetItemBestSellsAsync(int userId)
+        {
+            var rol = await _context.User
+                .Where(x => x.UserId == userId)
+                .Select(x => x.RoleId)
+                .FirstOrDefaultAsync();
+
+            return await _context.InvoiceSale
+                .Where(i => (rol == 1 || i.CreateBy == userId) &&
+                           i.DocDate.Year == DateTime.Now.Year &&
+                           !i.Canceled)
+                .Join(_context.InvoiceSaleDetail,
+                    i => i.DocId,
+                    id => id.DocId,
+                    (i, id) => id)
+                .Join(_context.Item,
+                    id => id.ItemId,
+                    it => it.ItemId,
+                    (id, it) => new { id.LineTotal, it.ItemName, it.ItemCode, it.ItemId })
+                .GroupBy(x => x.ItemId)
+                .Select(g => new DashboardDto
+                {
+                    Description = $"{g.First().ItemCode} - {g.First().ItemName}",
+                    Qty = g.Sum(x => x.LineTotal)
+                })
+                .OrderByDescending(x => x.Qty)
+                .Take(5)
+                .ToListAsync();
+        }
+
+        // Métodos para compras
+        public async Task<List<DashboardDto>> GetIncomePurchasePerDayAsync(int userId)
+        {
+            var rol = await _context.User
+                .Where(x => x.UserId == userId)
+                .Select(x => x.RoleId)
+                .FirstOrDefaultAsync();
+
             DateTime startDate = DateTime.Today.AddDays(-6);
-            var last7Days = Enumerable.Range(0, 7).Select(i => startDate.AddDays(i)).ToList();
-            var invoice = _context.InvoicePurchase
-                .Where(x => x.DocDate >= startDate && (rol == 1 || x.CreateBy == userId) && !x.Canceled)
+            var last7Days = Enumerable.Range(0, 7)
+                .Select(i => startDate.AddDays(i))
+                .ToList();
+
+            var purchases = await _context.InvoicePurchase
+                .Where(x => x.DocDate >= startDate &&
+                           (rol == 1 || x.CreateBy == userId) &&
+                           !x.Canceled)
                 .GroupBy(x => x.DocDate.Date)
-                .Select(g => new DashboardDto { Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(g.Key.ToString("dddd")), Qty = g.Sum(x => x.SubTotal) })
-                .ToList();
-            var result = last7Days.GroupJoin(
-                invoice,
-                x => CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(x.ToString("dddd")),
-                y => y.Description,
-                (x, y) => new DashboardDto { Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(x.ToString("dddd")), Qty = y.Sum(z => z?.Qty ?? 0) }
-            ).ToList();
-            return result;
-        }
-        public List<DashboardDto> GetInvoicePurchasePerMonth(int userId)
-        {
-            var rol = _context.User.Where(x => x.UserId == userId).FirstOrDefault().RoleId;
-            var currentYear = DateTime.Now.Year;
-
-            var invoicesByMonth = (
-                from month in Enumerable.Range(1, 12)
-                let monthStart = new DateTime(currentYear, month, 1)
-                join invoice in _context.InvoicePurchase.Where(x => !x.Canceled)
-                    on new { Month = monthStart.Month, Year = monthStart.Year }
-                    equals new { Month = invoice.DocDate.Month, Year = invoice.DocDate.Year }
-                    into invoicesInMonth
-                from invoice in invoicesInMonth.DefaultIfEmpty()
-                where invoice == null || (invoice.DocDate.Year == currentYear && !invoice.Canceled && (rol == 1 || invoice.CreateBy == userId))
-                group invoice by CultureInfo.CurrentCulture.TextInfo.ToTitleCase(monthStart.ToString("MMMM")) into monthGroup
-                select new DashboardDto
+                .Select(g => new DashboardDto
                 {
-                    Description = monthGroup.Key,
-                    Qty = monthGroup.Sum(v => v?.SubTotal ?? 0) // Handle null invoices
+                    Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(g.Key.ToString("dddd")),
+                    Qty = g.Sum(x => x.SubTotal)
                 })
-                .OrderBy(v => DateTime.ParseExact(v.Description, "MMMM", CultureInfo.CurrentCulture).Month)
-                .ToList();
+                .ToListAsync();
 
-            return invoicesByMonth;
+            return last7Days
+                .Select(date => new DashboardDto
+                {
+                    Description = CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(date.ToString("dddd")),
+                    Qty = purchases.FirstOrDefault(p =>
+                        p.Description == CultureInfo.GetCultureInfo("es-ES").TextInfo.ToTitleCase(date.ToString("dddd")))?.Qty ?? 0
+                })
+                .ToList();
         }
-        public List<DashboardDto> GetCXP(int userId)
+        public async Task<List<DashboardDto>> GetInvoicePurchasePerMonthAsync(int userId)
         {
-            var rol = _context.User
-               .Where(x => x.UserId == userId)
-               .Select(x => new { x.RoleId, x.SellerId })
-               .FirstOrDefault();
-            decimal balanceCustomers = _context.InvoicePurchase
-                 .Where(x => (rol.RoleId == 1 || x.CreateBy == userId))
-                .Sum(x=> x.Balance);
-            var result = new List<DashboardDto>
-            {
-                new DashboardDto { Description = "CXP", Qty = balanceCustomers }
-            };
-            return result;
-        }
-        public List<DashboardDto> GetItemBestPurchse(int userId)
-        {
-            var rol = _context.User
+            var rol = await _context.User
                 .Where(x => x.UserId == userId)
                 .Select(x => x.RoleId)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
-            var result = (from i in _context.InvoicePurchase
-                          join id in _context.InvoicePurchaseDetail on i.DocId equals id.DocId
-                          join it in _context.Item on id.ItemId equals it.ItemId
-                          where (rol == 1 || i.CreateBy == userId) && i.DocDate.Year == DateTime.Now.Year 
-                          group new { id.LineTotal, it.ItemName, it.ItemCode } by id.ItemId into grouped
-                          orderby grouped.Sum(x => x.LineTotal) descending
-                          select new DashboardDto
-                          {
-                              Description = $"{grouped.First().ItemCode} - {grouped.First().ItemName}",
-                              Qty = grouped.Sum(x => x.LineTotal)
-                          })
-                          .Take(5)
-                          .ToList();
-            return result;
+            var currentYear = DateTime.Now.Year;
+            var months = Enumerable.Range(1, 12)
+                .Select(month => new DateTime(currentYear, month, 1))
+                .ToList();
+
+            var purchases = await _context.InvoicePurchase
+                .Where(x => x.DocDate.Year == currentYear &&
+                           !x.Canceled &&
+                           (rol == 1 || x.CreateBy == userId))
+                .GroupBy(x => x.DocDate.Month)
+                .Select(g => new
+                {
+                    Month = g.Key,
+                    Total = g.Sum(x => x.SubTotal)
+                })
+                .ToListAsync();
+
+            return months
+                .Select(monthDate => new DashboardDto
+                {
+                    Description = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(monthDate.ToString("MMMM")),
+                    Qty = purchases.FirstOrDefault(i => i.Month == monthDate.Month)?.Total ?? 0
+                })
+                .OrderBy(x => DateTime.ParseExact(x.Description, "MMMM", CultureInfo.CurrentCulture).Month)
+                .ToList();
         }
 
+        public async Task<List<DashboardDto>> GetCXPAsync(int userId)
+        {
+            var userInfo = await _context.User
+                .Where(x => x.UserId == userId)
+                .Select(x => new { x.RoleId, x.SellerId })
+                .FirstOrDefaultAsync();
 
+            var balanceSuppliers = await _context.InvoicePurchase
+                .Where(x => (userInfo.RoleId == 1 || x.CreateBy == userId))
+                .SumAsync(x => x.Balance);
 
+            return new List<DashboardDto>
+        {
+            new DashboardDto { Description = "CXP", Qty = balanceSuppliers }
+        };
+        }
 
+        public async Task<List<DashboardDto>> GetItemBestPurchaseAsync(int userId)
+        {
+            var rol = await _context.User
+                .Where(x => x.UserId == userId)
+                .Select(x => x.RoleId)
+                .FirstOrDefaultAsync();
 
+            return await _context.InvoicePurchase
+                .Where(i => (rol == 1 || i.CreateBy == userId) &&
+                           i.DocDate.Year == DateTime.Now.Year)
+                .Join(_context.InvoicePurchaseDetail,
+                    i => i.DocId,
+                    id => id.DocId,
+                    (i, id) => id)
+                .Join(_context.Item,
+                    id => id.ItemId,
+                    it => it.ItemId,
+                    (id, it) => new { id.LineTotal, it.ItemName, it.ItemCode, it.ItemId })
+                .GroupBy(x => x.ItemId)
+                .Select(g => new DashboardDto
+                {
+                    Description = $"{g.First().ItemCode} - {g.First().ItemName}",
+                    Qty = g.Sum(x => x.LineTotal)
+                })
+                .OrderByDescending(x => x.Qty)
+                .Take(5)
+                .ToListAsync();
+        }
 
+        public async Task<List<DashboardDto>> GetSaleBySellerAsync(int userId)
+        {
+            var rol = await _context.User
+                .Where(x => x.UserId == userId)
+                .Select(x => new { x.RoleId , x.SellerId})
+                .FirstOrDefaultAsync();
 
-
-
-
-
-
-
-
-
-
-
-
-
+            return await _context.InvoiceSale
+                .Where(x => x.DocDate.Month == DateTime.Now.Month &&
+                           !x.Canceled &&
+                           (rol.RoleId == 1 || x.SellerId == rol.SellerId))
+                .Join(_context.Seller,
+                    os => os.SellerId,
+                    s => s.SellerId,
+                    (os, s) => new { OrderSale = os, Seller = s })
+                .GroupBy(x => x.Seller.SellerName)
+                .Select(g => new DashboardDto
+                {
+                    Description = g.Key,
+                    Qty = g.Sum(x => x.OrderSale.SubTotal)
+                })
+                .ToListAsync();
+        }
     }
 }

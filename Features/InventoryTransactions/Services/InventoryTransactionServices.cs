@@ -1,16 +1,15 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Org.BouncyCastle.Asn1.Ocsp;
 using Pos.WebApi.Features.InventoryTransactions.Dto;
 using Pos.WebApi.Features.InventoryTransactions.Entities;
-using Pos.WebApi.Features.Items.Dto;
 using Pos.WebApi.Features.Items.Entities;
 using Pos.WebApi.Features.Items.Services;
+using Pos.WebApi.Features.Reports.Services;
 using Pos.WebApi.Infraestructure;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Security.Cryptography;
+using System.Threading.Tasks;
 
 namespace Pos.WebApi.Features.InventoryTransactions.Services
 {
@@ -20,13 +19,15 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
         private readonly ItemJournalServices _journalServices;
         private readonly WareHouseServices _wareHouseServices;
         private readonly ItemServices _itemServices;
+        private readonly GenericDataService _dataService;
 
-        public InventoryTransactionServices(PosDbContext context, ItemJournalServices journalServices, WareHouseServices wareHouseServices, ItemServices itemServices)
+        public InventoryTransactionServices(PosDbContext context, ItemJournalServices journalServices, WareHouseServices wareHouseServices, ItemServices itemServices, GenericDataService dataServices)
         {
             _context = context;
             _journalServices = journalServices;
             _wareHouseServices = wareHouseServices;
             _itemServices = itemServices;
+            _dataService = dataServices;
         }
 
         //Type
@@ -472,7 +473,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                                ItemCode = i.ItemCode,
                                ItemName = i.ItemName,
                                Quantity = d.Quantity,
-                               
+                               QuantityUnit = d.QuantityUnit,
                                UnitOfMeasureName = u.UnitOfMeasureName,
                                UnitOfMeasureId = u.UnitOfMeasureId,
                                Price = d.Price,
@@ -534,6 +535,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                                ItemCode = i.ItemCode,
                                ItemName = i.ItemName,
                                Quantity = d.Quantity,
+                               QuantityUnit = d.QuantityUnit,
                                UnitOfMeasureName = u.UnitOfMeasureName,
                                UnitOfMeasureId = u.UnitOfMeasureId,
                                Price = d.Price,
@@ -690,6 +692,12 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
             return GetRevaluationCostByDate(request.CreateDate, request.CreateDate);
         }
         //Request Transfer
+        public async Task<List<Dictionary<string, object>>> GetItemsToTransfer(int almacenOrigen, int almacenDestino)
+        {
+            var parameters = new { AlmacenOrigen = almacenOrigen, AlmacenDestino = almacenDestino };
+            var result = await _dataService.ExecuteStoredProcedureAsync("sp_ObtenerInfoTraslado", parameters);
+            return result;
+        }
         public List<InventoryRequestTransferDto> GetRequestTransferById(int id)
         {
             var result = GetBaseRequest(x => x.TransferRequestId == id).ToList();
@@ -737,6 +745,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                                ItemCode = i.ItemCode,
                                ItemName = i.ItemName,
                                Quantity = d.Quantity,
+                               QuantityUnit = d.QuantityUnit,
                                UnitOfMeasureName = u.UnitOfMeasureName,
                                UnitOfMeasureId = u.UnitOfMeasureId,
                                Price = d.Price,
@@ -799,6 +808,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                                ItemCode = i.ItemCode,
                                ItemName = i.ItemName,
                                Quantity = d.Quantity,
+                               QuantityUnit = d.QuantityUnit,
                                UnitOfMeasureName = u.UnitOfMeasureName,
                                UnitOfMeasureId = u.UnitOfMeasureId,
                                Price = d.Price,
@@ -849,6 +859,63 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
             }
             return GetRequestTransferById(request.TransferRequestId);
         }
+
+        public List<InventoryRequestTransferDto> UpdateInventoryRequestTransfer(InventoryRequestTransfer request)
+        {
+            try
+            {
+                // Buscar la entidad que se desea actualizar
+                var existingInventoryReturn = _context.InventoryRequestTransfer.Include(ir => ir.Detail).FirstOrDefault(x => x.TransferRequestId == request.TransferRequestId);
+                if (existingInventoryReturn != null)
+                {
+                    existingInventoryReturn.Comment = request.Comment;
+                    existingInventoryReturn.ToWhsCode = request.ToWhsCode;
+                    // Manejo del detalle
+                    if (request.Detail != null)
+                    {
+
+                        // Elimina detalles antiguos
+                        _context.InventoryRequestTransferDetail.RemoveRange(existingInventoryReturn.Detail);
+                        existingInventoryReturn.Detail.Clear();
+
+                        // Agrega los nuevos detalles
+                        foreach (var detail in request.Detail)
+                        {
+                            detail.TransferRequestDetailId = 0;
+                            detail.TransferRequestId = request.TransferRequestId;
+                            existingInventoryReturn.Detail.Add(detail);
+                        }
+                    }
+                    _context.InventoryRequestTransferDetail.AddRange(existingInventoryReturn.Detail);
+                    _context.InventoryRequestTransfer.Update(existingInventoryReturn);
+                    int affectedRows = _context.SaveChanges();
+
+                    if (affectedRows == 0)
+                    {
+                        throw new DbUpdateConcurrencyException("No rows were affected. The entity may have been modified or deleted.");
+                    }
+                }
+                else
+                {
+                    throw new Exception("Entity not found.");
+                }
+
+                return GetRequestTransferById(request.TransferRequestId);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                // Manejo específico de excepciones de concurrencia
+                var mensaje = "Concurrency conflict: " + ex.Message;
+                throw new Exception(mensaje);
+            }
+            catch (Exception ex)
+            {
+                // Manejo de otras excepciones
+                var mensaje = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                throw new Exception(mensaje);
+            }
+        }
+
         public string CompleteInventoryRequestTransfer(int transferRequestId)
         {
             try
@@ -1015,24 +1082,24 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                 throw new Exception(mensaje);
             }
         }
-        public List<InventoryReturnDetail> GetResumenReturn(DateTime date, int whsCode)
+        public List<InventoryReturnDetailDTO> GetResumenReturn(DateTime date, int whsCode)
         {
             var exist = _context.InventoryReturn.Include(x => x.Detail)
                 .Where(x => x.DocDate.Date == date.Date && x.WhsCode == whsCode)
                 .FirstOrDefault();
-            if(exist != null)
+
+            if (exist != null && exist.Complete)
             {
-                if (exist.Complete)
-                {
-                    throw new Exception("Para este vendedor ya se realizo la devolucion del dia seleccionado.");
-                }
+                throw new Exception("Para este vendedor ya se realizo la devolucion del dia seleccionado.");
             }
-            var resumenReturn = _context.InventoryReturnDetail
+
+            // Ejecutar el procedimiento almacenado y mapear los resultados a InventoryReturnDetailDTO
+            var resumenReturn = _context.Set<InventoryReturnDetailDTO>()
                 .FromSqlRaw($@"
-                            EXEC [dbo].[ObtenerResumenItemsDevolucion] 
-                            @Fecha = '{date.ToString("yyyy-MM-dd")}',
-                            @AlmacenCode = {whsCode}
-                            ")
+                    EXEC [dbo].[ObtenerResumenItemsDevolucion] 
+                    @Fecha = '{date.ToString("yyyy-MM-dd")}',
+                    @AlmacenCode = {whsCode}
+                    ")
                 .ToList();
 
             if (exist != null)
@@ -1050,6 +1117,7 @@ namespace Pos.WebApi.Features.InventoryTransactions.Services
                     }
                 }
             }
+
             return resumenReturn;
         }
     }
